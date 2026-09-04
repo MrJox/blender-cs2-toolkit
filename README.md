@@ -48,6 +48,8 @@ project's development directory rather than in this repository (see [Repository 
 
 ```
 total_war_buildings/   the add-on itself (this is what gets installed into Blender)
+file_format_specs/     original reverse-engineered write-ups of the binary formats involved
+                        (.CS2, .rigid_model_v2, .cs2.parsed, .anim, .bone_inv_trans_mats)
 CLAUDE.md, AGENTS.md   instructions for AI coding sessions working in this codebase
 ```
 
