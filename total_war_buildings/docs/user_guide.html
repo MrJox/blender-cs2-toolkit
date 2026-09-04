@@ -932,6 +932,28 @@
               relief.</p>
             <p><b>Terrain Blend</b> uses these same three slots, but blends them by the mesh's own vertex
               alpha instead of a mask — which is how a terrain patch fades into the ground around it.</p>
+            <details>
+              <summary>Painting the vertex alpha for Terrain Blend</summary>
+              <div>
+                <p>Terrain Blend reads the mesh's own <b>Color Attribute</b> (vertex colours), not a
+                  texture. Add one under <b>Object Data Properties &gt; Color Attributes</b> (or just
+                  enter <b>Vertex Paint</b> mode, which creates one for you if the mesh has none), then
+                  paint its <b>alpha</b> channel: white/opaque keeps your own Diffuse, Specular and Normal
+                  exactly as authored; painting it down toward black exposes Decal Diffuse/Normal/Mask
+                  instead, letting the surface fade into the surrounding ground. A mesh with no colour
+                  attribute at all renders as constant white — Terrain Blend simply stays off, so this is
+                  safe to skip on pieces that do not need it.</p>
+                <div class="note warn">
+                  <p><b>Mark the attribute as the render colour, not just the active one.</b> A mesh can
+                    hold several Color Attributes, and only the one flagged for rendering — the small
+                    camera icon beside it in the Color Attributes list — is what gets exported and what the
+                    preview shader reads. Clicking an attribute to paint it makes it the <i>active</i> one
+                    for editing, which is a separate flag; if the render one is still pointed at something
+                    else, your painting has no effect on the exported result. Check it explicitly rather
+                    than assuming your latest edit is the one that ships.</p>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div class="card">
