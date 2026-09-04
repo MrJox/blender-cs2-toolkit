@@ -4,7 +4,7 @@
 # tracked here — everything else is ignored by default.
 /*
 
-!/total_war_buildings/
+!/total_war_cs2_addon/
 !/AGENTS.md
 !/CLAUDE.md
 !/README.md
@@ -20,6 +20,6 @@
 # not addon source. Some are byte-for-byte copies of real game data used for BOB
 # crash bisection (see CLAUDE.md's validation-discipline section), so none of these
 # generated .CS2/.blend outputs belong in the repo regardless.
-/total_war_buildings/scripts/*.CS2
-/total_war_buildings/scripts/*.blend
-/total_war_buildings/scripts/*.blend1
+/total_war_cs2_addon/scripts/*.CS2
+/total_war_cs2_addon/scripts/*.blend
+/total_war_cs2_addon/scripts/*.blend1

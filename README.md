@@ -38,20 +38,20 @@ project's development directory rather than in this repository (see [Repository 
 
 ## Installation
 
-1. Download `total_war_buildings` from the latest [release](../../releases) (or clone this repo).
-2. Copy the `total_war_buildings/` folder into Blender's addons directory, e.g.
-   `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\total_war_buildings\`.
+1. Download `total_war_cs2_addon` from the latest [release](../../releases) (or clone this repo).
+2. Copy the `total_war_cs2_addon/` folder into Blender's addons directory, e.g.
+   `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\total_war_cs2_addon\`.
 3. In Blender, enable **Edit > Preferences > Add-ons > Blender CS2 All-in-One Kit**.
 4. The add-on's panel appears under **View3D > Sidebar > Total War**.
 
 ## Repository layout
 
 ```
-total_war_buildings/   the add-on itself (this is what gets installed into Blender)
+total_war_cs2_addon/   the add-on itself (this is what gets installed into Blender)
 CLAUDE.md, AGENTS.md   instructions for AI coding sessions working in this codebase
 ```
 
-`total_war_buildings/docs/user_guide.html` is the artist-facing handbook; the published, browsable
+`total_war_cs2_addon/docs/user_guide.html` is the artist-facing handbook; the published, browsable
 copy is deployed to [GitHub Pages](../../deployments/github-pages).
 
 ## Repository scope
@@ -64,7 +64,7 @@ redistribute, plus scratch files and per-session planning docs — none of that 
 ## Contributing
 
 `main` is protected — changes land via pull request. Tagging a release (`vX.Y.Z`) on `main`
-triggers CI to package `total_war_buildings/` and publish it as a GitHub Release.
+triggers CI to package `total_war_cs2_addon/` and publish it as a GitHub Release.
 
 ## License
 

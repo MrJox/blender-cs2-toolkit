@@ -70,12 +70,12 @@ items implemented and confirmed before medium-effort items were even scoped). Do
 ## 4. Validation discipline — every change must be re-verified the same way prior ones were
 
 - After any change to `binary/`, `naming/`, or `scene_model/cs2_builder.py`, re-run
-  `total_war_buildings/scripts/validate_roundtrip.py` — it must stay byte-exact against all four
+  `total_war_cs2_addon/scripts/validate_roundtrip.py` — it must stay byte-exact against all four
   real samples in `Input/examples/raw_data/`.
 - After any change affecting the Blender-facing layers, sync the changed files to the installed
   addon copy at
-  `%APPDATA%\Blender Foundation\Blender\5.2\scripts\addons\total_war_buildings\` and re-run the
-  relevant `total_war_buildings/scripts/blender_*_test.py` script via
+  `%APPDATA%\Blender Foundation\Blender\5.2\scripts\addons\total_war_cs2_addon\` and re-run the
+  relevant `total_war_cs2_addon/scripts/blender_*_test.py` script via
   `blender.exe --background --python <script>`. Editing only the repo copy without syncing means
   the installed addon silently keeps running old code.
 - Crashes must be diagnosed with real evidence (Windows Event Log for BOB's fault module/offset,

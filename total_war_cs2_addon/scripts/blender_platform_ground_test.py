@@ -1,0 +1,140 @@
+import sys
+import traceback
+
+import addon_utils
+import bpy
+
+REPO_ROOT = r"C:\Users\Khaiali\source\repos\blender_buildings_plugin"
+OUTPUT_DIR = r"C:\Users\Khaiali\source\repos\blender_buildings_plugin\total_war_cs2_addon\scripts"
+ASSEMBLY_KIT_ROOT = r"D:\SteamLibrary\steamapps\common\Total War Attila\assembly_kit"
+
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+
+def active_layer_collection_for(collection: bpy.types.Collection) -> bpy.types.LayerCollection:
+    def find(layer_collection: bpy.types.LayerCollection):
+        if layer_collection.collection == collection:
+            return layer_collection
+        for child in layer_collection.children:
+            found = find(child)
+            if found is not None:
+                return found
+        return None
+
+    result = find(bpy.context.view_layer.layer_collection)
+    if result is None:
+        raise RuntimeError(f"Could not find layer collection for {collection.name}")
+    return result
+
+
+def add_box(collection: bpy.types.Collection, size: float = 1.0) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cube_add(size=size)
+    obj = bpy.context.active_object
+    for coll in list(obj.users_collection):
+        coll.objects.unlink(obj)
+    collection.objects.link(obj)
+    return obj
+
+
+def add_plane(collection: bpy.types.Collection) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_plane_add(size=2.0)
+    obj = bpy.context.active_object
+    for coll in list(obj.users_collection):
+        coll.objects.unlink(obj)
+    collection.objects.link(obj)
+    return obj
+
+
+def add_uv(obj: bpy.types.Object) -> None:
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project()
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def main() -> None:
+    module = addon_utils.enable("total_war_cs2_addon", default_set=True, persistent=False)
+    if module is None:
+        raise RuntimeError("addon_utils.enable returned failure")
+
+    prefs = bpy.context.preferences.addons["total_war_cs2_addon"].preferences
+    prefs.assembly_kit_root = ASSEMBLY_KIT_ROOT
+
+    print("=== building / piece / destruct ===")
+    bpy.ops.tw_buildings.new_building()
+    building = [c for c in bpy.data.collections if c.tw_role == "BUILDING"][-1]
+    building.name = "PlatformGroundUiTest"
+
+    bpy.context.view_layer.active_layer_collection = active_layer_collection_for(building)
+    bpy.ops.tw_buildings.new_piece()
+    piece = building.children[-1]
+
+    bpy.context.view_layer.active_layer_collection = active_layer_collection_for(piece)
+    bpy.ops.tw_buildings.new_destruct_level()
+    destruct = piece.children[-1]
+
+    display = [c for c in destruct.children if c.tw_role == "DISPLAY"][0]
+    collision = [c for c in destruct.children if c.tw_role == "COLLISION"][0]
+
+    lod_obj = add_box(display)
+    add_uv(lod_obj)
+    _mat_obj = bpy.context.active_object
+    _material = bpy.data.materials.new(name=f"{_mat_obj.name}_Material")
+    _mat_obj.data.materials.append(_material)
+    _mat_obj.active_material = _material
+    bpy.ops.tw_buildings.make_material()
+
+    collision_obj = add_box(collision, size=1.1)
+    collision_obj.tw_collision_type = "COLLISION"
+
+    print("=== add Platform collection with a Platform mesh and a Platform Ground mesh ===")
+    bpy.context.view_layer.active_layer_collection = active_layer_collection_for(destruct)
+    bpy.ops.tw_buildings.add_destruct_collection(role="PLATFORM")
+    platform_collection = [c for c in destruct.children if c.tw_role == "PLATFORM"][0]
+
+    platform_obj = add_plane(platform_collection)
+    print("platform object added:", platform_obj.name, "type:", platform_obj.tw_platform_type)
+
+    ground_obj = add_plane(platform_collection)
+    ground_obj.location = (3.0, 0.0, 0.0)
+    ground_obj.tw_platform_type = "PLATFORM_GROUND"
+    print("platform ground object added:", ground_obj.name, "type:", ground_obj.tw_platform_type)
+
+    print("=== validate ===")
+    bpy.context.view_layer.active_layer_collection = active_layer_collection_for(building)
+    bpy.ops.tw_buildings.validate()
+
+    print("=== export ===")
+    result = bpy.ops.tw_buildings.export_building(directory=OUTPUT_DIR)
+    print("export operator result:", result)
+
+    exported_path = f"{OUTPUT_DIR}\\{building.name}.CS2"
+    from binary.cs2_reader import read_cs2
+
+    with open(exported_path, "rb") as f:
+        data = f.read()
+    doc = read_cs2(data)
+    print("re-parsed OK:", doc.scene_block.rigid_models_count, "rigid,", doc.scene_block.materials_count, "materials")
+    ground_node = None
+    for rm in doc.rigid_models:
+        matids = [sm.material_id for sm in rm.geometry_chunks[0].submeshes]
+        class_rigid_info = next((a.value for a in rm.attributes.strings if a.name == "class_rigidINFO"), None)
+        print(" ", rm.node_name, "matids:", matids, "class_rigidINFO:", repr(class_rigid_info))
+        if rm.node_name.endswith("platform_ground"):
+            ground_node = rm
+
+    if ground_node is None:
+        raise RuntimeError("Expected a *_platform_ground node in the exported CS2, found none")
+
+    print("=== PLATFORM GROUND UI TEST PASSED ===")
+
+
+try:
+    main()
+except Exception:
+    print("=== PLATFORM GROUND UI TEST FAILED ===")
+    traceback.print_exc()
+    sys.exit(1)

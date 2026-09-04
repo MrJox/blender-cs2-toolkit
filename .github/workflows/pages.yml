@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "total_war_buildings/docs/**"
+      - "total_war_cs2_addon/docs/**"
   workflow_dispatch: {}
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p _site
-          cp total_war_buildings/docs/user_guide.html _site/index.html
+          cp total_war_cs2_addon/docs/user_guide.html _site/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
