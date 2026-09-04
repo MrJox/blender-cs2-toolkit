@@ -1,0 +1,25 @@
+# This working directory holds far more than the addon repo (reverse-engineering
+# research, huge game-derived data under Input/, scratch files, etc.) per the
+# workflow described in CLAUDE.md. Only the addon itself and repo scaffolding are
+# tracked here — everything else is ignored by default.
+/*
+
+!/total_war_buildings/
+!/AGENTS.md
+!/CLAUDE.md
+!/README.md
+!/LICENSE
+!/.gitignore
+!/.github/
+
+# Python bytecode caches anywhere under the addon.
+**/__pycache__/
+*.pyc
+
+# Test/debug fixtures produced by running scripts/*_test.py and scripts/bisect_*.py —
+# not addon source. Some are byte-for-byte copies of real game data used for BOB
+# crash bisection (see CLAUDE.md's validation-discipline section), so none of these
+# generated .CS2/.blend outputs belong in the repo regardless.
+/total_war_buildings/scripts/*.CS2
+/total_war_buildings/scripts/*.blend
+/total_war_buildings/scripts/*.blend1

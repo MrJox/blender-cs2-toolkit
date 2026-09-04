@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <contributor>
+      <author/>
+      <authoring_tool>FBX COLLADA exporter</authoring_tool>
+      <comments/>
+    </contributor>
+    <created>2026-08-23T18:52:32Z</created>
+    <keywords/>
+    <modified>2026-08-23T18:52:32Z</modified>
+    <revision/>
+    <subject/>
+    <title/>
+    <unit meter="0.025400" name="centimeter"/>
+    <up_axis>Y_UP</up_axis>
+  </asset>
+  <library_geometries>
+    <geometry id="piece01_destruct01_arrow_emitter01-lib" name="piece01_destruct01_arrow_emitter01Mesh">
+      <mesh>
+        <source id="piece01_destruct01_arrow_emitter01-POSITION">
+          <float_array id="piece01_destruct01_arrow_emitter01-POSITION-array" count="48">
+-11.876713 -11.621277 0.000000
+11.876713 -11.621277 0.000000
+-11.876713 11.621277 0.000000
+11.876713 11.621277 0.000000
+0.000000 0.000000 4.086611
+-11.876713 -11.621277 0.000000
+11.876713 -11.621277 0.000000
+11.876713 -11.621277 0.000000
+11.876713 11.621277 0.000000
+0.000000 0.000000 4.086611
+11.876713 11.621277 0.000000
+-11.876713 11.621277 0.000000
+0.000000 0.000000 4.086611
+-11.876713 11.621277 0.000000
+-11.876713 -11.621277 0.000000
+0.000000 0.000000 4.086611
+</float_array>
+          <technique_common>
+            <accessor source="#piece01_destruct01_arrow_emitter01-POSITION-array" count="16" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="piece01_destruct01_arrow_emitter01-Normal0">
+          <float_array id="piece01_destruct01_arrow_emitter01-Normal0-array" count="48">
+0.000000 0.000000 -1.000000
+0.000000 0.000000 -1.000000
+0.000000 0.000000 -1.000000
+0.000000 0.000000 -1.000000
+0.000000 -0.331736 0.943372
+0.000000 -0.331736 0.943372
+0.000000 -0.331736 0.943372
+0.325364 0.000000 0.945589
+0.325364 0.000000 0.945589
+0.325364 0.000000 0.945589
+0.000000 0.331736 0.943372
+0.000000 0.331736 0.943372
+0.000000 0.331736 0.943372
+-0.325364 0.000000 0.945589
+-0.325364 0.000000 0.945589
+-0.325364 0.000000 0.945589
+</float_array>
+          <technique_common>
+            <accessor source="#piece01_destruct01_arrow_emitter01-Normal0-array" count="16" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="piece01_destruct01_arrow_emitter01-UV0">
+          <float_array id="piece01_destruct01_arrow_emitter01-UV0-array" count="32">
+1.000000 0.000000
+0.000000 0.000000
+1.000000 1.000000
+0.000000 1.000000
+0.500000 1.000000
+0.000000 0.000000
+1.000000 0.000000
+0.000000 0.000000
+1.000000 0.000000
+0.500000 1.000000
+0.000000 0.000000
+1.000000 0.000000
+0.500000 1.000000
+0.000000 0.000000
+1.000000 0.000000
+0.500000 1.000000
+</float_array>
+          <technique_common>
+            <accessor source="#piece01_destruct01_arrow_emitter01-UV0-array" count="16" stride="2">
+              <param name="S" type="float"/>
+              <param name="T" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="piece01_destruct01_arrow_emitter01-VERTEX">
+          <input semantic="POSITION" source="#piece01_destruct01_arrow_emitter01-POSITION"/>
+          <input semantic="NORMAL" source="#piece01_destruct01_arrow_emitter01-Normal0"/>
+          <input semantic="TEXCOORD" source="#piece01_destruct01_arrow_emitter01-UV0"/>
+        </vertices>
+        <triangles count="6">
+          <input semantic="VERTEX" offset="0" source="#piece01_destruct01_arrow_emitter01-VERTEX"/>
+          <p> 1 0 3 0 2 3 5 6 4 7 8 9 10 11 12 13 14 15</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="arrow_emitter_proxy" name="arrow_emitter_proxy">
+      <node name="piece01_destruct01_arrow_emitter01" id="piece01_destruct01_arrow_emitter01" layer="troy_wall_straight_20" sid="piece01_destruct01_arrow_emitter01">
+        <matrix sid="matrix">1.000000 -0.000000 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 -0.000000 -0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000</matrix>
+        <instance_geometry url="#piece01_destruct01_arrow_emitter01-lib"/>
+        <extra>
+          <technique profile="FCOLLADA">
+            <visibility>1.000000</visibility>
+          </technique>
+        </extra>
+      </node>
+      <extra>
+        <technique profile="MAX3D">
+          <frame_rate>30.000000</frame_rate>
+        </technique>
+        <technique profile="FCOLLADA">
+          <start_time>0.000000</start_time>
+          <end_time>3.333333</end_time>
+        </technique>
+      </extra>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#arrow_emitter_proxy"/>
+  </scene>
+</COLLADA>

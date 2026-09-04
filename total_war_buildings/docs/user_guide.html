@@ -1,0 +1,1727 @@
+<title>Total War CS2 Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+  :root {
+    --ground: #f4f5f3;
+    --surface: #ffffff;
+    --surface-2: #eceeea;
+    --ink: #171c1e;
+    --ink-2: #3d474a;
+    --muted: #5f6b6d;
+    --line: #dcdfda;
+    --line-strong: #c3c8c1;
+    --accent: #16705e;
+    --accent-soft: #e2efea;
+    --accent-ink: #0f4d41;
+    --warn: #8a5a12;
+    --warn-soft: #f6eddc;
+    --danger: #9a3327;
+    --shadow: 0 1px 2px rgba(23, 28, 30, .06), 0 8px 24px -16px rgba(23, 28, 30, .28);
+
+    --font-display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+    --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "Consolas", ui-monospace, monospace;
+
+    --rail: 264px;
+    --pad: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #14181a;
+      --surface: #1b2124;
+      --surface-2: #222a2d;
+      --ink: #e8ecea;
+      --ink-2: #c2cbc8;
+      --muted: #97a3a1;
+      --line: #2c3538;
+      --line-strong: #3d4a4d;
+      --accent: #54c4a6;
+      --accent-soft: #16302b;
+      --accent-ink: #7fd8bf;
+      --warn: #ddab5a;
+      --warn-soft: #302a1c;
+      --danger: #e3897c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px -18px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #14181a;
+    --surface: #1b2124;
+    --surface-2: #222a2d;
+    --ink: #e8ecea;
+    --ink-2: #c2cbc8;
+    --muted: #97a3a1;
+    --line: #2c3538;
+    --line-strong: #3d4a4d;
+    --accent: #54c4a6;
+    --accent-soft: #16302b;
+    --accent-ink: #7fd8bf;
+    --warn: #ddab5a;
+    --warn-soft: #302a1c;
+    --danger: #e3897c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px -18px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  code, kbd, .chip, .path {
+    font-family: var(--font-mono);
+    font-size: .82em;
+  }
+
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .34em;
+    white-space: nowrap;
+  }
+
+  kbd {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: .1em .4em;
+    color: var(--ink);
+  }
+
+  /* ---------- shell ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 0;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+
+  .rail {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 2.2rem 1.25rem 3rem 1.5rem;
+    border-right: 1px solid var(--line);
+    background: var(--ground);
+  }
+
+  .rail-brand {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.02rem;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+    margin: 0 0 .25rem;
+  }
+
+  .rail-sub {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.6rem;
+  }
+
+  .rail-group { margin-bottom: 1.4rem; }
+
+  .rail-group > p {
+    font-family: var(--font-mono);
+    font-size: .64rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 .5rem;
+  }
+
+  .rail-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; }
+
+  .rail-group a {
+    display: block;
+    padding: .26rem .55rem;
+    border-left: 2px solid transparent;
+    color: var(--ink-2);
+    text-decoration: none;
+    font-size: .93rem;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .rail-group a:hover { background: var(--surface-2); color: var(--ink); }
+  .rail-group a.on { border-left-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+
+  .main { padding: 2.4rem var(--pad) 6rem; min-width: 0; }
+  .wrap { max-width: 68ch; }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { padding-bottom: 2.4rem; border-bottom: 1px solid var(--line); margin-bottom: 2.6rem; }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 .9rem;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5vw, 3.1rem);
+    line-height: 1.04;
+    letter-spacing: -.025em;
+    text-wrap: balance;
+    margin: 0 0 .9rem;
+  }
+
+  .lede { font-size: 1.16rem; color: var(--ink-2); margin: 0 0 1.4rem; text-wrap: pretty; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 3vw, 1.95rem);
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0 0 .2rem;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.13rem;
+    letter-spacing: -.01em;
+    margin: 0 0 .35rem;
+  }
+
+  h4 {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0 0 .3rem;
+  }
+
+  p { margin: 0 0 .85rem; text-wrap: pretty; }
+  .wrap > p:last-child, .card p:last-child, .note p:last-child { margin-bottom: 0; }
+
+  section { scroll-margin-top: 1.5rem; padding-bottom: 3.2rem; }
+
+  .sec-head { margin-bottom: 1.5rem; }
+  .sec-head .eyebrow { margin-bottom: .5rem; }
+  .sec-head p { color: var(--ink-2); margin-top: .55rem; }
+
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0 0 2.6rem; }
+
+  /* ---------- content bits ---------- */
+
+  ul.plain { margin: 0 0 1rem; padding-left: 1.15rem; display: flex; flex-direction: column; gap: .35rem; }
+  ul.plain li::marker { color: var(--line-strong); }
+
+  .steps { counter-reset: step; list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: .9rem; }
+
+  .steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    gap: 0 .75rem;
+    align-items: start;
+  }
+
+  /* Every child sits in the text column; only the counter uses the narrow one. Without this a
+     step's second paragraph wraps onto row 2 and is squeezed into the 1.75rem number column. */
+  .steps li > * { grid-column: 2; }
+
+  .steps li::before {
+    grid-column: 1;
+    content: counter(step);
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    line-height: 1.6rem;
+    text-align: center;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-weight: 500;
+  }
+
+  .steps li > p { margin: 0; }
+  .steps li > p + p { margin-top: .3rem; color: var(--muted); font-size: .95rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: var(--shadow);
+  }
+
+  .cards { display: flex; flex-direction: column; gap: .8rem; margin-bottom: 1.4rem; }
+
+  .card > h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+  .card p { font-size: .97rem; }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: .62rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: .18em .5em;
+    border-radius: 3px;
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .tag.req { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+  .tag.opt { background: transparent; }
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: .8rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 0 0 1.2rem;
+    font-size: .97rem;
+  }
+
+  .note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+  .note b { font-family: var(--font-body); }
+
+  details {
+    border-top: 1px solid var(--line);
+    margin-top: .85rem;
+    padding-top: .7rem;
+  }
+
+  details > summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: .74rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+  }
+
+  details > summary::-webkit-details-marker { display: none; }
+
+  details > summary::before {
+    content: "+";
+    display: inline-block;
+    width: 1rem;
+    text-align: center;
+    font-size: .9rem;
+    line-height: 1;
+  }
+
+  details[open] > summary::before { content: "–"; }
+  details > summary:hover { color: var(--ink); }
+  details > div { padding-top: .7rem; font-size: .95rem; color: var(--ink-2); }
+  details > div > p:last-child { margin-bottom: 0; }
+
+  .tree {
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    line-height: 1.85;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 0 0 1.2rem;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--ink-2);
+  }
+
+  .tree b { color: var(--ink); font-weight: 500; }
+  .tree i { color: var(--muted); font-style: normal; }
+
+  .tablewrap { overflow-x: auto; margin: 0 0 1.2rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .93rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: .55rem .85rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody th { font-weight: 600; white-space: nowrap; }
+
+  .kv { display: grid; gap: .55rem; margin: 0 0 1.2rem; }
+
+  .kv > div {
+    display: grid;
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: .2rem .9rem;
+    padding-bottom: .55rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .kv > div:last-child { border-bottom: 0; padding-bottom: 0; }
+  .kv dt { font-weight: 600; font-size: .97rem; }
+  .kv dd { margin: 0; color: var(--ink-2); font-size: .95rem; }
+
+  .path { color: var(--muted); }
+
+  .footer {
+    border-top: 1px solid var(--line);
+    padding-top: 1.4rem;
+    color: var(--muted);
+    font-size: .9rem;
+  }
+
+  .navtoggle { display: none; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+
+    .rail {
+      position: static;
+      height: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 1.25rem var(--pad);
+    }
+
+    .rail-nav { display: none; }
+    .rail-nav.open { display: block; }
+
+    .navtoggle {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      font-family: var(--font-mono);
+      font-size: .74rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      padding: .45rem .8rem;
+      cursor: pointer;
+    }
+
+    .rail-sub { margin-bottom: 1rem; }
+    .kv > div { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Contents">
+    <p class="rail-brand">Total War CS2 Handbook</p>
+    <p class="rail-sub">Blender add-on guide</p>
+    <button class="navtoggle" type="button" aria-expanded="false" aria-controls="railnav">Contents</button>
+
+    <div class="rail-nav" id="railnav">
+      <div class="rail-group">
+        <p>Start here</p>
+        <ul>
+          <li><a href="#what">What this add-on does</a></li>
+          <li><a href="#setup">Install &amp; set up</a></li>
+          <li><a href="#first">Your first building</a></li>
+        </ul>
+      </div>
+
+      <div class="rail-group">
+        <p>The basics</p>
+        <ul>
+          <li><a href="#collections">Collections are the plan</a></li>
+          <li><a href="#materials">Materials &amp; textures</a></li>
+          <li><a href="#shaders">Every shader, every slot</a></li>
+          <li><a href="#validate">Validate</a></li>
+          <li><a href="#export">Export &amp; BOB</a></li>
+          <li><a href="#import">Opening game files</a></li>
+        </ul>
+      </div>
+
+      <div class="rail-group">
+        <p>Workflows</p>
+        <ul>
+          <li><a href="#buildings">Buildings</a></li>
+          <li><a href="#units">Units</a></li>
+          <li><a href="#skeletons">Skeletons</a></li>
+          <li><a href="#animation">Animation</a></li>
+          <li><a href="#vegetation">Vegetation</a></li>
+        </ul>
+      </div>
+
+      <div class="rail-group">
+        <p>When stuck</p>
+        <ul>
+          <li><a href="#problems">Common problems</a></li>
+          <li><a href="#glossary">Word list</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="wrap">
+
+      <header class="masthead">
+        <p class="eyebrow">Total War modding · Blender add-on</p>
+        <h1>Build things for the battlefield.</h1>
+        <p class="lede">This add-on turns a Blender scene into files a Total War game can load — houses,
+          walls, gatehouses, soldiers, weapons, skeletons and animation. This guide explains what every
+          button is for, in plain words.</p>
+        <p><b>New here?</b> Read <a href="#what">What this add-on does</a>, then follow
+          <a href="#first">Your first building</a>. Everything else is a reference you can dip into.</p>
+      </header>
+
+      <section id="what">
+        <div class="sec-head">
+          <p class="eyebrow">Start here</p>
+          <h2>What this add-on does</h2>
+          <p>Three things, in this order.</p>
+        </div>
+
+        <ol class="steps">
+          <li>
+            <p><b>You model in Blender.</b> Normal meshes, normal materials, normal keyframes.</p>
+            <p>The add-on never asks you to type a technical name. You sort your work into folders
+              (Blender calls them <i>collections</i>) and it works out the rest.</p>
+          </li>
+          <li>
+            <p><b>It writes a <code>.CS2</code> file.</b> That is the format the game's own tools read.</p>
+            <p>It sits <i>between</i> the two: your <code>.blend</code> is the source, the game files are the
+              finished thing, and <code>.CS2</code> is the staging post in the middle.</p>
+          </li>
+          <li>
+            <p><b>BOB turns that into game files.</b> BOB is a tool that comes with the Assembly Kit.</p>
+            <p>The add-on can run BOB for you and even put the result into the game's data folder, so you
+              never have to open BOB yourself.</p>
+          </li>
+        </ol>
+
+        <div class="note">
+          <p><b>You need an Assembly Kit.</b> It is a free download on Steam, under the game's own
+            "Tools". Without it there is nothing to compile with, and materials will not look right.</p>
+        </div>
+
+        <h3>Which games</h3>
+
+        <div class="kv">
+          <div>
+            <dt>Attila <span class="tag req">confirmed</span></dt>
+            <dd>Every part of this add-on was built and tested against Attila's Assembly Kit, with real
+              compiles. Its kit is also the one found automatically.</dd>
+          </div>
+          <div>
+            <dt>Rome II, Thrones of Britannia <span class="tag opt">untested</span></dt>
+            <dd>They use the same file formats and are expected to work, but nothing has been built for
+              them yet. Point the add-on at their kit by hand and report what happens.</dd>
+          </div>
+          <div>
+            <dt>Warhammer and later <span class="tag opt">open</span></dt>
+            <dd>Not supported today, and not ruled out either. The later titles changed parts of these
+              formats, so support would be work rather than luck.</dd>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="setup">
+        <div class="sec-head">
+          <p class="eyebrow">Start here</p>
+          <h2>Install &amp; set up</h2>
+          <p>Once, then never again.</p>
+        </div>
+
+        <ol class="steps">
+          <li>
+            <p><b>Install the add-on.</b> In Blender: <code>Edit &gt; Preferences &gt; Add-ons</code>, then
+              install the add-on's <code>.zip</code> and tick it on.</p>
+          </li>
+          <li>
+            <p><b>Check the Assembly Kit folder.</b> Still in Preferences, expand the add-on's entry.</p>
+            <p>It finds Attila's kit by itself. For any other game, or if the box is empty, point it at
+              that game's own <span class="path">assembly_kit</span> folder inside
+              <span class="path">steamapps/common</span>.</p>
+          </li>
+          <li>
+            <p><b>Open the sidebar.</b> Hover the 3D viewport and press <kbd>N</kbd>, then click the
+              <b>Total War</b> tab down the right edge.</p>
+          </li>
+          <li>
+            <p><b>Pick a Workflow.</b> The top panel switches between Building, Unit, Skeleton, Skeletal
+              Animation and Vegetation.</p>
+            <p>It only changes which panels you see — it never changes your scene.</p>
+          </li>
+        </ol>
+
+        <details>
+          <summary>Why the add-on wants that folder</summary>
+          <div>
+            <p>Three reasons. It reads the game's own shader textures from there so your materials preview
+              correctly; it runs BOB out of the kit's <span class="path">binaries</span> folder; and BOB will
+              only compile files that live inside the kit's <span class="path">raw_data</span> folder — so
+              that is where you export to.</p>
+          </div>
+        </details>
+      </section>
+
+      <hr class="rule">
+
+      <section id="first">
+        <div class="sec-head">
+          <p class="eyebrow">Start here</p>
+          <h2>Your first building</h2>
+          <p>A single stone block, start to finish. Ten minutes.</p>
+        </div>
+
+        <ol class="steps">
+          <li><p><b>New Building.</b> Name it something short and lowercase, like <code>my_hut</code>. That
+            name becomes the filename.</p></li>
+          <li><p><b>New Building Piece.</b> A piece is a chunk that gets destroyed as one lump.</p></li>
+          <li><p><b>New Destruct Level.</b> This makes a <b>Display</b> and a <b>Collision</b> folder for you.</p></li>
+          <li>
+            <p><b>Put a cube in Display.</b> This is what players see.</p>
+            <p>It needs a UV map (<kbd>U</kbd> in Edit Mode → Smart UV Project) and a material.</p>
+          </li>
+          <li>
+            <p><b>Put another cube in Collision.</b> This is what the camera and arrows hit. It is never
+              drawn, so keep it simple and roughly the same size.</p>
+            <p>Soldiers are stopped by something else — an Outline line, further down. A building with no
+              Outline is one they can walk straight through.</p>
+          </li>
+          <li><p><b>Make Total War Material.</b> Select the display cube, open the Materials panel, click it.
+            Your material is now the game's shader.</p></li>
+          <li><p><b>Validate.</b> Fix anything it lists in red.</p></li>
+          <li>
+            <p><b>Export Building.</b> Choose a folder <b>inside</b> the Assembly Kit's
+              <span class="path">raw_data</span>, leave both tick boxes on, press Export.</p>
+            <p>Blender freezes for up to a minute while BOB works. That is normal.</p>
+          </li>
+        </ol>
+
+        <div class="note">
+          <p><b>Where did it go?</b> The compiled model lands in the kit's
+            <span class="path">working_data</span> folder, and the <code>.pack</code> lands in the game's own
+            <span class="path">data</span> folder, ready to load.</p>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="collections">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Collections are the plan</h2>
+          <p>The add-on reads your Outliner tree. Where a mesh sits is what the mesh <i>is</i>.</p>
+        </div>
+
+        <p>You never set that by hand: the <b>New…</b> and <b>Add…</b> buttons create each collection with
+          its job already attached.</p>
+
+        <div class="note">
+          <p><b>Forgot what a folder is for?</b> Click it, then look at
+            <code>Properties &gt; Collection &gt; Total War Info</code>. Every collection explains itself there.</p>
+        </div>
+
+        <div class="tree"><b>my_hut</b>            <i>← Building. The filename.</i>
+└── <b>Piece</b>            <i>← one destructible chunk</i>
+    └── <b>Destruct</b>     <i>← one damage state</i>
+        ├── <b>Display</b>   <i>← what you see (LOD 1…5)</i>
+        ├── <b>Collision</b> <i>← camera and projectile collision</i>
+        └── <i>…optional extras you add yourself</i></div>
+
+        <h3>Two rules worth knowing early</h3>
+
+        <ul class="plain">
+          <li><b>Buttons only appear where they can work.</b> No "New Destruct Level" until a piece is
+            selected. If a button is missing, you have the wrong thing selected.</li>
+          <li><b>Selecting means clicking.</b> Click the collection in the Outliner, or click one of its
+            objects in the viewport.</li>
+        </ul>
+
+        <h3>LOD levels</h3>
+        <p><b>LOD</b> means "level of detail" — the same object modelled simpler for when the camera is far
+          away. LOD 1 is the close-up version. You set it per mesh with the <b>LOD Level</b> dropdown.</p>
+        <p><b>One LOD is perfectly fine to begin with.</b> Add more only when you want the distant
+          version to be cheaper.</p>
+        <p><b>Skipping a number is allowed</b>, and buildings do it often. The levels you do have pack into
+          consecutive slots, each keeping the camera distance its own number implies — so LOD 1, 2 and 4
+          gives you a three-step chain with a jump in the distances, not a broken model. Validate mentions
+          it so you know it happened, and lets the export through.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section id="materials">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Materials &amp; textures</h2>
+          <p>The game does not use Blender's shading, so a normal material would be thrown away.</p>
+        </div>
+
+        <ol class="steps">
+          <li><p><b>Give the mesh a material</b> the usual Blender way.</p></li>
+          <li><p><b>Press Make Total War Material.</b> It rebuilds the material with the game's own shader,
+            so the viewport shows roughly what the game will show.</p></li>
+          <li><p><b>Fill in the texture slots.</b> They appear as image nodes in the Shading workspace:
+            Diffuse, Normal, Mask, Gloss, Specular and more.</p></li>
+        </ol>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Shader Type</h3>
+            <p>Which of the game's shaders to use. The menu only offers the ones that suit your current
+              workflow — building shaders for buildings, skin and cloth shaders for soldiers.</p>
+            <p><b>Hover any entry</b> to read what it is for. <b>Standard</b> is the right answer for most
+              buildings and props.</p>
+          </div>
+
+          <div class="card">
+            <h3>Alpha Mode</h3>
+            <p>What the shader does with your diffuse texture's transparency. Leave it on <b>None</b> unless
+              you are making something cut-out — foliage, a grille, rope — which wants <b>Alpha Test</b>.</p>
+          </div>
+
+          <div class="card">
+            <h3>Shader Preview Light</h3>
+            <p>The game shader carries its own light, so Blender's lamps do not reach it. Pick a light here
+              and the preview follows it as you move it.</p>
+          </div>
+        </div>
+
+        <details>
+          <summary>Why is my material black?</summary>
+          <div>
+            <p>Some slots — the dirt, dirt mask and ambient-occlusion maps — default to <b>black</b>, exactly
+              as the game's own tools do. A shader that reads them will render black until you assign a real
+              texture. Either fill the slot or switch to the plain <b>Standard</b> shader.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Shaders that need a second UV map</summary>
+          <div>
+            <p><b>Tiled Dirtmap</b> and <b>Ship Ambientmap</b> read one of their textures from a second UV
+              map. Add one in <code>Object Data Properties &gt; UV Maps</code> before using them — Validate
+              will warn you if you forget.</p>
+          </div>
+        </details>
+
+        <p>Every shader and every slot is listed in
+          <a href="#shaders">Every shader, every slot</a>.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section id="shaders">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Every shader, every slot</h2>
+          <p>What each texture slot feeds, and which shader adds which extras.</p>
+        </div>
+
+        <h3>The five every material has</h3>
+
+        <p>Press <b>Make Total War Material</b> and these appear as image nodes in the Shading workspace,
+          whichever shader you picked.</p>
+
+        <div class="kv">
+          <div>
+            <dt>Diffuse</dt>
+            <dd>The base colour. Its <b>alpha channel</b> is what Alpha Mode reads, so this is the texture
+              that decides where a cut-out surface has holes.</dd>
+          </div>
+          <div>
+            <dt>Normal</dt>
+            <dd>Surface bumps and detail. DirectX convention — green points down. Flip the green channel if
+              your map came from a Blender bake and looks inverted.</dd>
+          </div>
+          <div>
+            <dt>Gloss</dt>
+            <dd>How <b>sharp</b> the highlight is. Only the red channel is read: black is a broad dull
+              sheen, white is a tight mirror-like one.</dd>
+          </div>
+          <div>
+            <dt>Level</dt>
+            <dd>How <b>strong</b> the reflection is, again from the red channel. Metal wants high, cloth
+              wants low.</dd>
+          </div>
+          <div>
+            <dt>Specular</dt>
+            <dd>The <b>colour</b> of that highlight. Grey for most things; a real metal tints its own
+              reflection, so bronze and gold belong here.</dd>
+          </div>
+        </div>
+
+        <div class="note">
+          <p><b>Unfilled slots are not empty.</b> Each one starts as the same flat placeholder the game's
+            tools use — grey, white, black or flat-normal blue depending on the slot. That is why a fresh
+            material renders as plain grey rather than magenta.</p>
+        </div>
+
+        <h3>What each shader adds</h3>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Shader</th><th>Adds on top of the five</th><th>For</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Standard</th>
+                <td>Tint Mask 1, 2, 3 <i>(optional)</i></td>
+                <td>Buildings, props, rigid weapons and shields</td>
+              </tr>
+              <tr>
+                <th>Tiled Dirtmap</th>
+                <td>Dirtmap, Dirtmask</td>
+                <td>Seamless fort wall pieces and other repeated runs</td>
+              </tr>
+              <tr>
+                <th>Ship Ambientmap</th>
+                <td>Ambient Map</td>
+                <td>Surfaces with baked-in shadowing</td>
+              </tr>
+              <tr>
+                <th>Terrain Blend</th>
+                <td>Decal Diffuse, Decal Normal, Decal Mask</td>
+                <td>Ground that takes on the map's own terrain</td>
+              </tr>
+              <tr>
+                <th>Weighted</th>
+                <td>Tint Mask 1, 2, 3 <i>(optional)</i></td>
+                <td>Armour, cloth, equipment on a soldier — where tinting is actually used</td>
+              </tr>
+              <tr>
+                <th>Weighted Skin</th>
+                <td>The three masks change meaning — see below</td>
+                <td>Faces, hands, bare limbs</td>
+              </tr>
+              <tr>
+                <th>…&nbsp;Decal</th>
+                <td>Decal Diffuse, Decal Normal, Decal Mask</td>
+                <td>Insignia, war paint, tattoos</td>
+              </tr>
+              <tr>
+                <th>…&nbsp;Dirtmap</th>
+                <td>Decal Dirtmap, Decal Dirtmask</td>
+                <td>Grime over armour or skin</td>
+              </tr>
+              <tr>
+                <th>Tree&nbsp;/&nbsp;Tree Leaf</th>
+                <td>Nothing — the five only</td>
+                <td>Bark and leaf cards</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The weighted shaders combine: <b>Weighted Skin Decal Dirtmap</b> is skin lighting plus a decal
+          set plus grime, and carries all of their slots at once.</p>
+
+        <h3>The extra slots explained</h3>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Tint Mask 1, 2, 3 <span class="tag opt">optional</span></h3>
+            <p><b>Entirely optional, and mostly used on clothing.</b> A soldier's tunic, cloak and trousers
+              are the usual case — it is what lets one body texture serve a dozen factions. Buildings and
+              props can use it, but rarely do.</p>
+            <p>Three greyscale masks mark which parts get recoloured — typically one for cloth, one for
+              leather, one for trim — and each has a colour swatch beside it in the node group.</p>
+            <p>They default to <b>black, meaning no tint at all</b>, so an untouched material shows your
+              diffuse exactly as painted.</p>
+            <div class="note warn">
+              <p><b>Paint the diffuse white wherever a tint mask is active.</b> The tint is
+                <i>multiplied</i> into your diffuse, so white takes the tint colour cleanly — while a
+                coloured base multiplies with it and comes out muddy or near-black. A red tint over blue
+                cloth gives you dark sludge, not purple.</p>
+              <p>Keep those areas white or light greyscale: the greyscale carries the folds and shading,
+                the tint supplies the colour.</p>
+            </div>
+            <details>
+              <summary>The Faction Colouring slider</summary>
+              <div>
+                <p>Beside the three colours sits a <b>Faction Colouring</b> value from 0 to 1. At 1 the
+                  colour is brightness-corrected the way the game treats a real faction colour; at 0 it is
+                  used exactly as you picked it. Leave it at 1 unless you are matching a specific look.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>Dirtmap + Dirtmask <span class="tag opt">Tiled Dirtmap</span></h3>
+            <p><b>Best suited to seamless fort wall pieces</b> — the segments you repeat end to end to build
+              a wall. The grime tiles at its own scale rather than with the base texture, so it carries
+              across the joins and the run stops looking like the same block stamped twenty times.</p>
+            <p><b>Dirtmap</b> is the grime pattern. <b>Dirtmask</b> says where it is allowed to show — in the
+              crevices, under the eaves, not on the exposed faces.</p>
+            <details>
+              <summary>Two textures, two UV maps, one tiling number</summary>
+              <div>
+                <p>The dirtmap reads your <b>first</b> UV map through a Mapping node labelled <b>Dirtmap
+                  Tiling</b>, which starts at <b>4×</b> — raise it for finer grain, lower it for broader
+                  streaks.</p>
+                <p>The dirtmask reads your <b>second</b> UV map, untiled, so it stays pinned to the model.
+                  That is why this shader needs a second UV map and warns if there is none.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>Ambient Map <span class="tag opt">Ship Ambientmap</span></h3>
+            <p>Baked ambient occlusion — the soft contact shadows where parts meet. It is multiplied into
+              both the colour and the highlight, so it darkens everything at once.</p>
+            <p>Read from the <b>second</b> UV map, so this shader needs one too.</p>
+          </div>
+
+          <div class="card">
+            <h3>Decal Diffuse, Normal, Mask <span class="tag opt">any …&nbsp;Decal shader</span></h3>
+            <p>A second little texture set laid over the first: a shield emblem, a unit marking, war paint.
+              <b>Decal Mask</b> controls where it lands, the other two give it colour and its own surface
+              relief.</p>
+            <p><b>Terrain Blend</b> uses these same three slots, but blends them by the mesh's own vertex
+              alpha instead of a mask — which is how a terrain patch fades into the ground around it.</p>
+          </div>
+
+          <div class="card">
+            <h3>Decal Dirtmap + Decal Dirtmask <span class="tag opt">any …&nbsp;Dirtmap shader</span></h3>
+            <p>The soldier version of grime. Both read the <b>first</b> UV map, tiled and nudged by a fixed
+              offset so the pattern does not sit identically on every unit wearing the same texture.</p>
+            <p>Note this is a different pass from the building's Tiled Dirtmap — different slots, different
+              UV map. A soldier uses these; a wall uses those.</p>
+          </div>
+
+          <div class="card">
+            <h3>Rim, Sub Surface, Back Scatter <span class="tag opt">any Skin shader</span></h3>
+            <p>On a skin shader the three tint masks are <b>reused for something else entirely</b> — they
+              stop being faction colours and become lighting strengths.</p>
+            <p><b>Rim</b> is the bright edge where light wraps around a limb. <b>Sub Surface</b> is light
+              spreading under the skin. <b>Back Scatter</b> is the glow through thin parts, like an ear
+              against the sun.</p>
+            <p>A skin shader also ignores the Specular colour map — the game's own skin models carry none.</p>
+          </div>
+        </div>
+
+        <div class="note">
+          <p><b>Rule of thumb:</b> start on <b>Standard</b> (buildings) or <b>Weighted</b> (soldiers), fill
+            in Diffuse and Normal, and add the rest only when you can see what is missing.</p>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="validate">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Validate</h2>
+          <p>Press it before every export. It is free and it saves you a minute of BOB.</p>
+        </div>
+
+        <p>Results appear in Blender's status bar at the bottom — click it to see the full list.</p>
+
+        <div class="kv">
+          <div>
+            <dt>Red — error</dt>
+            <dd>Export refuses to run until it is fixed. Something is missing or contradictory.</dd>
+          </div>
+          <div>
+            <dt>Orange — warning</dt>
+            <dd>Export goes ahead. It means "this is unusual, are you sure?"</dd>
+          </div>
+        </div>
+
+        <p>Export always runs the same checks itself, so nothing broken sneaks through. Validate just lets
+          you see the list sooner.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section id="export">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Export &amp; BOB</h2>
+          <p>One button, three optional stages.</p>
+        </div>
+
+        <div class="note warn">
+          <p><b>Export into the Assembly Kit's <span class="path">raw_data</span> folder.</b> BOB refuses to
+            build anything kept anywhere else. Export elsewhere and you get the <code>.CS2</code> file only,
+            plus a message telling you so.</p>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Compile With BOB <span class="tag req">on by default</span></h3>
+            <p>Runs BOB for you and turns the <code>.CS2</code> into real game files. Blender is locked while
+              it works — the status bar counts the seconds. Expect 20 seconds or so.</p>
+          </div>
+
+          <div class="card">
+            <h3>Create a Pack <span class="tag req">on by default</span></h3>
+            <p>Bundles the result into a <code>.pack</code> file and moves it into the game's
+              <span class="path">data</span> folder, where the game and the editor look for it.</p>
+          </div>
+
+          <div class="card">
+            <h3>Pack Type</h3>
+            <p><b>Release</b> — loadable in TEd, the Assembly Kit's battlefield editor. This is the default.</p>
+            <p><b>Mod</b> — loadable in the game itself. Remember to switch it on in the launcher's mod list,
+              or the game will ignore it.</p>
+          </div>
+        </div>
+
+        <p>When BOB finishes, a dialog tells you whether it worked and where things went. If it failed, the
+          dialog carries BOB's own reason.</p>
+
+        <h3>Exporting several things at once</h3>
+
+        <p><b>Select more than one, press Export once.</b> Every selected asset is validated and written
+          out, and then <b>the whole batch is built in a single BOB run</b> — which matters, because
+          starting BOB costs about twenty seconds no matter how much you ask it to do. Ten buildings one at
+          a time is ten of those waits; ten in a batch is one.</p>
+
+        <div class="kv">
+          <div>
+            <dt>Buildings</dt>
+            <dd>Select the buildings — in the viewport, or their collections in the Outliner. One compile
+              run for all of them, plus one pack run if Create a Pack is on.</dd>
+          </div>
+          <div>
+            <dt>Units</dt>
+            <dd>Select the unit assets. Every model inside each one is pooled into the same single run.</dd>
+          </div>
+          <div>
+            <dt>Skeletons</dt>
+            <dd>Select the skeletons. One run.</dd>
+          </div>
+          <div>
+            <dt>Animation</dt>
+            <dd>Different, because a clip is not a collection: the export dialog lists the skeleton's clips
+              with <b>tick boxes</b>. Tick the ones you want.</dd>
+          </div>
+        </div>
+
+        <p>The dialog names what it is about to build, so you can check the batch before committing.</p>
+
+        <div class="note warn">
+          <p><b>One kind at a time.</b> A selection mixing buildings with units, or a unit with the skeleton
+            it is bound to, is refused — they build in different ways. Export them separately.</p>
+          <p><b>One folder per batch.</b> Everything in a run goes to the folder the dialog asks for.</p>
+        </div>
+
+        <details>
+          <summary>If one asset in a batch fails</summary>
+          <div>
+            <p>Nothing is handed to BOB — a batch never half-builds into the game files. Whatever was
+              written out before the failure stays on disk, since those are complete valid files, and the
+              blocked dialog lists every failure with the asset that caused it.</p>
+          </div>
+        </details>
+
+        <p><b>Validate is still one at a time</b> — it checks the active asset only. Export validates
+          everything in the batch itself, so nothing broken slips through either way.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section id="import">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Opening game files</h2>
+          <p>The fastest way to learn is to open something the game shipped with and look at it.</p>
+        </div>
+
+        <p>Use <code>File &gt; Import &gt; Total War</code>. One entry handles every supported format — the
+          add-on works out what the file is and switches to the matching workflow.</p>
+
+        <div class="kv">
+          <div>
+            <dt><code>.CS2</code></dt>
+            <dd>A source file: a building, a unit model, a skeleton or an animation clip.</dd>
+          </div>
+          <div>
+            <dt><code>.cs2.parsed</code></dt>
+            <dd>A compiled building's collision, platforms and markers — no visible meshes in it.</dd>
+          </div>
+          <div>
+            <dt><code>.rigid_model_v2</code></dt>
+            <dd>A compiled model: a unit part, a prop, a tree.</dd>
+          </div>
+          <div>
+            <dt><code>.anim</code></dt>
+            <dd>A compiled animation clip.</dd>
+          </div>
+          <div>
+            <dt><code>.variantmeshdefinition</code></dt>
+            <dd>An assembled soldier — it pulls in every model it refers to.</dd>
+          </div>
+        </div>
+
+        <h3>Where to find files worth opening</h3>
+
+        <div class="cards">
+          <div class="card">
+            <h3>The Assembly Kit</h3>
+            <p>Its <span class="path">raw_data</span> folder holds real <code>.CS2</code> source files —
+              forts, walls, towers. This is the best place to start: open one, see how it is arranged, copy
+              the idea.</p>
+          </div>
+
+          <div class="card">
+            <h3>The game's own pack files</h3>
+            <p>Everything the game actually ships lives inside <code>.pack</code> files, which Blender
+              cannot read directly. Open them with
+              <a href="https://github.com/Frodo45127/rpfm/releases" target="_blank" rel="noopener">RPFM</a>,
+              a free pack editor.</p>
+            <p>Extract the models or animations you want to somewhere on disk, then import those with
+              <code>File &gt; Import &gt; Total War</code> as normal.</p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="buildings">
+        <div class="sec-head">
+          <p class="eyebrow">Workflow</p>
+          <h2>Buildings</h2>
+          <p>Houses, walls, towers, gatehouses, bridges — anything that stands on the battlefield.</p>
+        </div>
+
+        <h3>The three levels</h3>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Building <span class="tag req">required</span></h3>
+            <p>The top folder. <b>Its name is the filename</b>, so keep it short, lowercase, no spaces.</p>
+          </div>
+
+          <div class="card">
+            <h3>Piece <span class="tag req">required</span></h3>
+            <p>One chunk that is destroyed as a unit. A gatehouse with two towers is naturally three pieces —
+              split it wherever parts should fall separately.</p>
+            <details>
+              <summary>Damage Parent</summary>
+              <div>
+                <p>A piece can name another piece as its <b>Damage Parent</b>. When the parent is damaged,
+                  this piece takes some damage too — that is how a hit on one fort wall segment shakes the
+                  segments either side. Leave it empty for a piece that stands alone.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>Destruct Level <span class="tag req">required</span></h3>
+            <p>One damage state of that piece. The first is the undamaged building; each one after it is the
+              piece after taking more punishment.</p>
+            <p>Each level carries its own visible meshes, its own collision, its own everything. One level is
+              enough for a building that never breaks.</p>
+          </div>
+        </div>
+
+        <h3>Inside a destruct level</h3>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Display <span class="tag req">required</span></h3>
+            <p>What players see. One mesh per LOD, each with a UV map and a material.</p>
+          </div>
+
+          <div class="card">
+            <h3>Collision <span class="tag req">required</span></h3>
+            <p>Holds the building's collision volumes. Never drawn, so keep them simple — a box is often
+              enough.</p>
+            <div class="note warn">
+              <p><b>Collision 3D is not what stops soldiers.</b> It catches the camera and projectiles.
+                Units are stopped by the <b>Outline</b> and <b>Hard</b> lines, over in the Lines
+                collection — see below.</p>
+            </div>
+            <details>
+              <summary>The five collision types</summary>
+              <div>
+                <p><b>Collision 3D</b> — the ordinary volume. Camera and projectiles.</p>
+                <p><b>Collision 3D Gate Closed</b> — blocks the gateway while the gate is shut.</p>
+                <p><b>Collision 3D Gate Ajar</b> — the open gate leaves.</p>
+                <p><b>Collision 3D Boiling Oil</b> — the pouring mechanism's volume.</p>
+                <p><b>Soft Collision</b> — light clutter units walk straight through and knock down as they
+                  go: fences, stalls, market stands. It blocks nobody. Model it as a box and it becomes an
+                  upright cylinder as wide and as tall as that box.</p>
+              </div>
+            </details>
+            <details>
+              <summary>What actually counts as "has collision"</summary>
+              <div>
+                <p>A destruct level must carry at least one <b>Collision 3D</b>, <b>gate</b> or <b>boiling
+                  oil</b> volume, or export is blocked and the build would fail.</p>
+                <p><b>A Soft Collision on its own does not satisfy it</b> — tested directly: a level holding
+                  only a soft collision is refused with "has no collision mesh". A gate volume or a boiling-oil
+                  volume does count, which is how a gate-only piece in a real fort gets away with carrying no
+                  ordinary volume at all.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>Platform <span class="tag opt">optional</span></h3>
+            <p>A walkable floor. This is how the game knows units can stand on your battlements.</p>
+            <p><b>Platform Ground</b> is the variant for irregular rubble — typically the surface a destroyed
+              piece leaves behind.</p>
+          </div>
+
+          <div class="card">
+            <h3>Lines <span class="tag opt">optional</span></h3>
+            <p>Curves that tell the battlefield AI how to move around and through the building. Draw a curve,
+              then pick its <b>Line Type</b>.</p>
+            <details>
+              <summary>What the line types do</summary>
+              <div>
+                <p><b>Outline Collision</b> — a closed loop around the footprint that units cannot cross.
+                  <b>This is what stops soldiers walking through your building</b>, not the 3D collision. You can
+                  have several, which is how you leave a gap where a gate goes.</p>
+                <p><b>Hard Collision</b> — the same thing under its other name, for when one loop covers the
+                  whole footprint.</p>
+                <p><b>Gate Closed / Gate Ajar Hard Collision</b> — the same idea for a gateway, shut and open.</p>
+                <p><b>Ground AD</b> — "AD" is <i>area divider</i>: a line splitting the terrain areas around
+                  the building. Blocks nothing; units cross it freely.</p>
+                <p><b>Pipe: …</b> — 15 kinds of route: ladders, ropes, stairs, windows, doors, jumps, climbing
+                  over rubble. Draw the line where you want units to travel.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>EFLines <span class="tag opt">optional</span></h3>
+            <p><b>EF is short for Entity Formation.</b> Each line says "form units up here, facing that way,
+              doing this" — firing over a low wall, defending a doorway, manning a crenellation.</p>
+            <p>Press <b>New Line</b> to get one with a direction pointer. Move the end points to place it and
+              the pointer tip to turn it.</p>
+            <div class="note warn">
+              <p><b>An EFLine must sit over a Platform.</b> Units need a floor to stand on. Validate checks
+                this for you.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Docking Lines <span class="tag opt">optional</span></h3>
+            <p>Where <b>siege engines dock against the building</b> — a siege tower dropping its ramp onto
+              your wall, a siege ladder going up, a battering ram reaching the gate.</p>
+            <p>Same shape as an EFLine, with the same direction pointer, but it needs no Platform under it.
+              Put them along the wall tops and at the gate.</p>
+          </div>
+
+          <div class="card">
+            <h3>Referenced Props <span class="tag opt">optional</span></h3>
+            <p>A marker that tells the game to place a prop that already exists — a torch, a barrel — instead
+              of you modelling it again.</p>
+            <p>An Empty is enough. Set its <b>Referenced Prop Name</b> and place it; the game reads only the
+              position and rotation.</p>
+          </div>
+
+          <div class="card">
+            <h3>Arrow Emitters <span class="tag opt">optional</span></h3>
+            <p>The points a <b>fort tower</b> shoots its arrows from — the defensive towers on your own
+              walls, not an attacker's siege tower.</p>
+            <p>Press <b>New Arrow Emitter</b> for the right marker, then move and rotate it to aim it.</p>
+          </div>
+
+          <div class="card">
+            <h3>Height Map Mesh <span class="tag opt">optional</span></h3>
+            <p>A 3D model placed on a battle map in TEd as <b>walkable terrain</b> — a hillside, a ramp, a
+              raised plateau that units march over.</p>
+            <div class="note warn">
+              <p><b>It never becomes a game file.</b> A height map mesh lives only in the
+                <code>.CS2</code>. Nothing compiles it further.</p>
+              <p>So if you share one, ship the <code>.CS2</code> <b>and</b> its raw_data table entries with
+                it. Without them, any TEd map using it cannot find the terrain and comes up empty.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Destruction Animation <span class="tag opt">optional</span></h3>
+            <p>The debris that flies away when this level is destroyed. Each chunk is a normal mesh with a UV
+              map and material, plus keyframes on its position and rotation.</p>
+            <p>Key them the ordinary Blender way — <kbd>I</kbd> in the viewport. A chunk with no keyframes
+              just sits there.</p>
+          </div>
+        </div>
+
+        <h3>Whole-building extras</h3>
+        <p>These belong to the building itself, not to any one piece. Add them from the <b>Add…</b> menu with
+          the Building folder selected.</p>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Flag <span class="tag opt">optional</span></h3>
+            <p>Where the building's <b>icon appears in the battle UI</b> — the marker is that icon's
+              position in 3D space, so put it somewhere the player can see, usually above the roof.</p>
+            <p>One per building. Press <b>New Flag</b> and move the marker.</p>
+          </div>
+
+          <div class="card">
+            <h3>Region Zones <span class="tag opt">optional</span></h3>
+            <p>Closed areas belonging to the whole building, drawn as cyclic curves
+              (<kbd>Alt</kbd>+<kbd>C</kbd> in Edit Mode).</p>
+            <p><b>What the game does with them is not established.</b> Real buildings carry them, and they
+              import and export faithfully — so copy the arrangement from a building like yours rather than
+              inventing one. Nothing breaks if you leave them out.</p>
+          </div>
+        </div>
+
+        <h3>Gates &amp; boiling oil</h3>
+        <p>With a <b>Display</b> folder selected, the <b>Add…</b> menu offers four more. All of them live
+          inside Display.</p>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Gate Closed / Gate Open</h3>
+            <p>The gate meshes in each position, one per LOD. Model the open version where the doors
+              actually end up once swung.</p>
+          </div>
+
+          <div class="card">
+            <h3>Gate Animation</h3>
+            <p>The moving door leaves. Keyframe each one, then set its <b>Gate Animation Kind</b>: opening,
+              closing, or destroyed while shut or open.</p>
+          </div>
+
+          <div class="card">
+            <h3>Boiling Oil</h3>
+            <p>The pouring mechanism defenders use on a gatehouse. Its collision goes in the Collision folder
+              as <b>Collision 3D Boiling Oil</b>.</p>
+          </div>
+        </div>
+
+        <details>
+          <summary>A complete gate needs three parts</summary>
+          <div>
+            <p>A gate is not one setting — it is three things in three different folders, and all three
+              carry a matching name:</p>
+            <p><b>Display</b> gets Gate Closed and Gate Open meshes. <b>Collision</b> gets a Gate Closed and a
+              Gate Ajar volume. <b>Lines</b> gets a Gate Closed and a Gate Ajar hard-collision loop.</p>
+          </div>
+        </details>
+      </section>
+
+      <hr class="rule">
+
+      <section id="units">
+        <div class="sec-head">
+          <p class="eyebrow">Workflow</p>
+          <h2>Units</h2>
+          <p>Soldiers and the gear they carry.</p>
+        </div>
+
+        <p>A soldier is not one model. His body, his helmet, his sword and his shield are <b>separate
+          assets</b>, and the game assembles them. That is what makes the same body reusable across a
+          hundred units.</p>
+
+        <div class="tree"><b>roman_body</b>         <i>← Unit Asset. One exported file.</i>
+├── <b>body</b>            <i>← Unit Model, with its LOD meshes</i>
+└── <b>weapon_01</b>       <i>← attachment point on a bone</i>
+
+<b>roman_gladius</b>      <i>← a second asset, on its own</i>
+└── <b>gladius</b></div>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Unit Asset <span class="tag req">required</span></h3>
+            <p>One exported file. Name it for what it is — that name is the filename.</p>
+          </div>
+
+          <div class="card">
+            <h3>Unit Model <span class="tag req">required</span></h3>
+            <p>One named mesh inside the file, holding its LOD meshes. An asset can hold a few: a head asset
+              carries the head in one model and the eyes and tongue in another.</p>
+          </div>
+
+          <div class="card">
+            <h3>Model Type <span class="tag req">required</span></h3>
+            <p><b>Weighted Model</b> — skinned to a skeleton, so it bends when the soldier moves. Bodies,
+              armour, cloth.</p>
+            <p><b>Rigid Model</b> — a solid item that rides on one bone without bending. Swords, shields,
+              helmet crests.</p>
+            <div class="note warn">
+              <p><b>Every model in one asset must be the same type.</b> A file carries one kind or the other,
+                never both. Split them into two assets.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3>Skinning a weighted model</h3>
+
+        <ol class="steps">
+          <li><p><b>Get a skeleton into the scene</b> — import one from the Assembly Kit, or make one in the
+            Skeleton workflow.</p></li>
+          <li><p><b>Press Bind To Skeleton.</b> Every mesh in the asset gets the modifier it needs.</p></li>
+          <li>
+            <p><b>Paint weights the normal Blender way</b>, onto vertex groups named after the bones.</p>
+            <p>Two rules: every vertex needs some weight, and <b>at most two bones may pull on any one
+              vertex</b>. Extra influences are dropped.</p>
+          </li>
+          <li><p><b>Watch it move.</b> The clip picker sits right in the Unit panel — pick an animation and
+            press Play without leaving the workflow.</p></li>
+        </ol>
+
+        <div class="card">
+          <h3>Attachment Points</h3>
+          <p>A named socket the game hangs something off — <code>weapon_01</code>, <code>crest_centre</code>.
+            The sword asset does not know where the hand is; the socket on the body does.</p>
+          <p>Press <b>New Attachment Point</b>, name it, pick the bone it rides on, and move it to where the
+            item should sit.</p>
+        </div>
+
+        <details>
+          <summary>Which shader for which part</summary>
+          <div>
+            <p><b>Weighted</b> for armour, cloth and equipment. <b>Weighted Skin</b> for faces, hands and bare
+              limbs — light scatters through it properly. Add <b>Dirtmap</b> for grime, <b>Decal</b> for
+              insignia and war paint. A rigid weapon or shield uses <b>Standard</b>.</p>
+          </div>
+        </details>
+      </section>
+
+      <hr class="rule">
+
+      <section id="skeletons">
+        <div class="sec-head">
+          <p class="eyebrow">Workflow</p>
+          <h2>Skeletons</h2>
+          <p>The bones a soldier is built on. One skeleton serves every model weighted to it.</p>
+        </div>
+
+        <div class="note">
+          <p><b>Most of the time you do not need this.</b> Import one of the game's skeletons and weight your
+            models to that — it already matches every animation the game ships.</p>
+        </div>
+
+        <ol class="steps">
+          <li><p><b>New Skeleton</b> makes an empty Blender Armature in its own folder. Or press
+            <b>Import</b> to bring one in.</p></li>
+          <li><p><b>Add bones in Edit Mode</b>, exactly as you would for any Blender rig.</p></li>
+          <li>
+            <p><b>Leave Edit Mode to set each bone's options.</b> Blender only exposes them outside Edit
+              Mode — the panel tells you so.</p>
+          </li>
+        </ol>
+
+        <div class="kv">
+          <div>
+            <dt>Bone Type</dt>
+            <dd>What kind of bone this is: Root, Core, Face, Left/Right Hand, Floating (a bone with no skin
+              on it, used to hang props from). <b>Not In Bone Table</b> means the game never indexes it —
+              helper and marker nodes.</dd>
+          </div>
+          <div>
+            <dt>Sort Order</dt>
+            <dd>0 on the root bone, 1 on everything else. That is what every skeleton in the game does.</dd>
+          </div>
+          <div>
+            <dt>Bone Object</dt>
+            <dd>Export as a real bone with a length, rather than a bare marker point.</dd>
+          </div>
+          <div>
+            <dt>Reference / Cinematic</dt>
+            <dd>Whether other skeletons derive from this one, and whether it is a higher-detail skeleton for
+              cinematics rather than for battle.</dd>
+          </div>
+        </div>
+
+        <div class="note warn">
+          <p><b>Export skeletons into <span class="path">raw_data/animations/skeletons/</span></b> — not a
+            subfolder of it. BOB looks a skeleton up by name in that exact folder. The add-on warns you if
+            you export anywhere else.</p>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="animation">
+        <div class="sec-head">
+          <p class="eyebrow">Workflow</p>
+          <h2>Animation</h2>
+          <p>Clips for a skeleton — a walk, a swing, an idle.</p>
+        </div>
+
+        <ol class="steps">
+          <li><p><b>New Animation Clip.</b> Give it a name, a length in frames, and a rate.</p></li>
+          <li><p><b>Pose the bones and key them</b> with Blender's own <kbd>I</kbd>. Nothing special here —
+            it is an ordinary Blender Action.</p></li>
+          <li><p><b>Play it</b> from the panel to check it.</p></li>
+          <li><p><b>Validate, then Export Animation.</b></p></li>
+        </ol>
+
+        <div class="kv">
+          <div>
+            <dt>Clip picker</dt>
+            <dd>Swap between clips on the skeleton. <b>X</b> puts the skeleton back in its rest pose and
+              keeps the clip; the bin deletes the clip for good.</dd>
+          </div>
+          <div>
+            <dt>Clip FPS</dt>
+            <dd>Frames per second. One Blender frame is one clip frame, so this is both what you watch and
+              what gets compiled.</dd>
+          </div>
+          <div>
+            <dt>Skeleton</dt>
+            <dd>Which skeleton the clip is for. It has to exist in
+              <span class="path">raw_data/animations/skeletons/</span> for the build to resolve it.</dd>
+          </div>
+        </div>
+
+        <div class="note">
+          <p><b>Not sure what rate to use?</b> Every clip measured for this add-on runs at 20 fps — though
+            those were building debris rather than soldier animation. If you have a game clip to compare
+            against, match it.</p>
+        </div>
+
+        <h3>Opening the game's own animations</h3>
+
+        <p>Far easier than animating from scratch: bring in a clip the game already ships, watch how it
+          moves, and edit from there.</p>
+
+        <ol class="steps">
+          <li>
+            <p><b>Import the skeleton first.</b> A clip is just bone motion — without the matching skeleton
+              there is nothing for it to move.</p>
+            <p>Skeletons live in the Assembly Kit under
+              <span class="path">raw_data/animations/skeletons/</span>.</p>
+          </li>
+          <li>
+            <p><b>Import the clip.</b> Either the authored <code>.CS2</code> from the Assembly Kit, or a
+              compiled <code>.anim</code> pulled out of a game pack with
+              <a href="https://github.com/Frodo45127/rpfm/releases" target="_blank" rel="noopener">RPFM</a>.</p>
+            <p>Both arrive as ordinary Blender Actions, and the workflow switches to Skeletal Animation by
+              itself.</p>
+          </li>
+          <li>
+            <p><b>Pick it in the clip menu and press Play.</b> It is now yours to scrub, edit and re-export
+              like any clip you authored.</p>
+          </li>
+        </ol>
+
+        <div class="note warn">
+          <p><b>Import the skeleton before the clip.</b> The other way round, the add-on has nothing to
+            attach the motion to and tells you so.</p>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="vegetation">
+        <div class="sec-head">
+          <p class="eyebrow">Workflow</p>
+          <h2>Vegetation</h2>
+          <p>Trees, shrubs and stones — <b>reading only</b>, for now.</p>
+        </div>
+
+        <p>You can open any of the game's vegetation and study how it is put together. You cannot yet export
+          your own; that part is not built.</p>
+
+        <p>Import a tree's <code>.rigid_model_v2</code> and its companion tech file comes along with it.</p>
+
+        <div class="kv">
+          <div>
+            <dt>Vegetation LOD</dt>
+            <dd>One level of detail, holding bark meshes, leaf meshes, or both. Which LOD it is decides how
+              far away it is still drawn: 100 m, 200 m, then 400 m.</dd>
+          </div>
+          <div>
+            <dt>Generated Billboard</dt>
+            <dd>The flat far-distance stand-in the build tool makes automatically. Shown for reference —
+              editing it changes nothing.</dd>
+          </div>
+          <div>
+            <dt>Generated Fire Hull</dt>
+            <dd>The burn shape and its flame emitters, also generated. Also read-only.</dd>
+          </div>
+        </div>
+
+        <p>The two vegetation shaders are <b>Tree</b> for bark and solid props, and <b>Tree Leaf</b> for
+          leaf cards and whole shrubs. The game sways both in the wind.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section id="problems">
+        <div class="sec-head">
+          <p class="eyebrow">When stuck</p>
+          <h2>Common problems</h2>
+          <p>Nearly everything that goes wrong is one of these.</p>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <h4>"Select a … collection in the Outliner first"</h4>
+            <p>The button acts on whatever is selected, and nothing suitable is. Click the folder it names in
+              the Outliner and press it again.</p>
+          </div>
+
+          <div class="card">
+            <h4>The button I need is not there</h4>
+            <p>Buttons appear only where they can work. Check the <b>Workflow</b> at the top of the sidebar
+              is the right one, and that you have the right thing selected.</p>
+          </div>
+
+          <div class="card">
+            <h4>BOB refuses to build</h4>
+            <p>It only builds files inside the Assembly Kit's <span class="path">raw_data</span> folder.
+              Export there. Also make sure BOB is not already open — it will not run twice.</p>
+          </div>
+
+          <div class="card">
+            <h4>"has no collision mesh"</h4>
+            <p>Every destruct level needs at least one collision mesh. A plain box will do.</p>
+          </div>
+
+          <div class="card">
+            <h4>"is missing a UV map" / "has no material"</h4>
+            <p>Visible meshes need both. Unwrap with <kbd>U</kbd> in Edit Mode, add a material, then press
+              Make Total War Material.</p>
+          </div>
+
+          <div class="card">
+            <h4>"is scaled in Object Mode"</h4>
+            <p>Only position and rotation are exported, so the scale would be silently lost. Apply it:
+              <kbd>Ctrl</kbd>+<kbd>A</kbd> → Scale.</p>
+          </div>
+
+          <div class="card">
+            <h4>An imported model came in without its skeleton</h4>
+            <p>The add-on could not find a matching skeleton, so its vertex groups are named
+              <code>bone_0</code>, <code>bone_1</code>… Import the right skeleton, then re-import the model.</p>
+          </div>
+
+          <div class="card">
+            <h4>My mod does not show up in game</h4>
+            <p>A <b>Mod</b> pack has to be switched on in the launcher's mod list. A <b>Release</b> pack is
+              for TEd, not for the game.</p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section id="glossary">
+        <div class="sec-head">
+          <p class="eyebrow">When stuck</p>
+          <h2>Word list</h2>
+          <p>The jargon you will meet, in one place.</p>
+        </div>
+
+        <div class="kv">
+          <div><dt>Assembly Kit</dt><dd>Total War's official modding tools, free on Steam.</dd></div>
+          <div><dt>BOB</dt><dd>The Assembly Kit tool that turns source files into game files. This add-on can drive it for you.</dd></div>
+          <div><dt>TEd</dt><dd>The Assembly Kit's battlefield editor, where you place buildings on a map.</dd></div>
+          <div><dt>.CS2</dt><dd>The source file this add-on writes. Not yet loadable by the game.</dd></div>
+          <div><dt>.pack</dt><dd>The bundle the game actually loads. Lives in the game's data folder.</dd></div>
+          <div><dt>Piece</dt><dd>One chunk of a building that is destroyed as a unit.</dd></div>
+          <div><dt>Destruct level</dt><dd>One damage state of a piece: intact, damaged, ruined.</dd></div>
+          <div><dt>LOD</dt><dd>Level of detail. LOD 1 is the close-up version; higher numbers are simpler.</dd></div>
+          <div><dt>Collision</dt><dd>The invisible solid shape units and shots hit.</dd></div>
+          <div><dt>Platform</dt><dd>A surface units are allowed to walk on.</dd></div>
+          <div><dt>EFLine</dt><dd>A marker saying units fight from here, facing this way.</dd></div>
+          <div><dt>Pipe</dt><dd>A route units travel along: a ladder, a rope, a staircase, a window.</dd></div>
+          <div><dt>Weighted</dt><dd>Skinned to a skeleton, so it bends when the bones move.</dd></div>
+          <div><dt>Rigid</dt><dd>Solid, riding on one bone without bending.</dd></div>
+          <div><dt>Attachment point</dt><dd>A named socket the game hangs a weapon, shield or crest from.</dd></div>
+          <div><dt>Bone table</dt><dd>The list of bones the game indexes, exported beside a skeleton.</dd></div>
+        </div>
+
+        <p class="footer">Every dropdown and button in the add-on carries its own tooltip — hover it. Every
+          collection explains itself under <code>Properties &gt; Collection &gt; Total War Info</code>.</p>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var toggle = document.querySelector(".navtoggle");
+    var nav = document.getElementById("railnav");
+
+    toggle.addEventListener("click", function () {
+      var open = nav.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    nav.addEventListener("click", function (event) {
+      if (event.target.tagName === "A" && window.matchMedia("(max-width: 900px)").matches) {
+        nav.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    var links = {};
+    Array.prototype.forEach.call(nav.querySelectorAll("a"), function (link) {
+      links[link.getAttribute("href").slice(1)] = link;
+    });
+
+    var current = null;
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var link = links[entry.target.id];
+        if (!link || link === current) return;
+        if (current) current.classList.remove("on");
+        link.classList.add("on");
+        current = link;
+      });
+    }, { rootMargin: "-10% 0px -70% 0px", threshold: 0 });
+
+    Array.prototype.forEach.call(document.querySelectorAll("section[id]"), function (section) {
+      observer.observe(section);
+    });
+  })();
+</script>
