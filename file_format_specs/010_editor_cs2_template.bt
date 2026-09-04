@@ -1,0 +1,1065 @@
+//------------------------------------------------
+//--- 010 Editor v13.0.1 Binary Template
+//
+//      File: .cs2 file
+//   Authors: Mr.Jox (aka victimized.)
+//   Version: 1.0
+//   Purpose: Total War .Cas2 intermediate file format decoding
+//  Category: 
+// File Mask: 
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+
+//------------------------------------------------
+// GLOBAL VARIABLES
+//------------------------------------------------
+
+local int i = 0;
+local int j = 0;
+const uint32 UINT32_MAX = 0xFFFFFFFF; // 4,294,967,295
+
+//------------------------------------------------
+// ENUMS
+//------------------------------------------------
+
+enum <uint32> NODE_TYPE
+{
+    LIGHT = 5,
+    CAMERA = 6,
+    RIGID_MODEL = 7,
+    WEIGHTED_MODEL = 10,
+    LINE = 11,
+    SCENE_ROOT = 12,
+    MATERIAL = 13,
+    INSTANCE_NO_MATERIAL = 16,
+    DUMMY = 17,
+    INSTANCE_OVERRIDE_MATERIAL = 18,
+};
+
+enum <uint32> MATERIAL_TYPE
+{
+    MATERIAL_TYPE_DEFAULT = 0,
+    MATERIAL_TYPE_DIRECTX = 1,
+};
+
+enum <uint32> ATTRIBUTE_TYPE
+{
+    ATTRIBUTE_TYPE_FLOAT = 0,
+    ATTRIBUTE_TYPE_STRING = 1,
+    ATTRIBUTE_TYPE_VEC3 = 3,
+    ATTRIBUTE_TYPE_INT = 8,
+    ATTRIBUTE_TYPE_VEC4 = 9,
+};
+
+//------------------------------------------------
+// STRUCTURES
+//------------------------------------------------
+
+typedef struct
+{
+    uint16 Length;
+    wchar_t Data[Length];
+} UTF16_STRING <read=UTF16StringRead>;
+
+typedef struct
+{
+    float X;
+    float Y;
+    float Z;
+
+} VEC3 <read=Vec3Read>;
+    
+typedef struct
+{
+    float X;
+    float Y;
+    float Z;
+    float W;
+
+} VEC4 <read=Vec4Read>;
+
+typedef struct
+{
+    char char1;
+    char char2;
+    char char3;
+    char char4;
+} FILE <read=Cs2HeaderRead>;
+
+typedef struct 
+{
+    FILE FileFormat;
+    uint32 HeaderSize;
+    float ExporterVersion; // Exporter format version (e.g. 1.0 / 0.02f)
+    uint32 FeatureFlags; // Exporter feature flags bitmask
+    UTF16_STRING Plugin;
+    UTF16_STRING Details;
+} HEADER;
+
+typedef struct
+{
+    UTF16_STRING Name;
+    ATTRIBUTE_TYPE DataType;
+    UTF16_STRING Value;
+} NODE_ATTRIBUTE_STRING <read=StringAttributeRead>;
+
+typedef struct
+{
+    UTF16_STRING Name;
+    uint32 InterpolationMode; // Track interpolation enum (0=Static, 1=Linear, 2=Slerp, 5=RLE)
+    ATTRIBUTE_TYPE AttributeType;
+    uint32 NumKeys; // Number of keyframes in track
+    uint32 StartFrame; // Track start frame timestamp
+    uint32 EndFrame; // Track end frame timestamp
+    uint32 LoopFlags; // Looping & extrapolation flags
+    uint32 ReservedFlags; // Quality/compression flags
+    uint32 Value;
+    
+} NODE_ATTRIBUTE_INTEGER <read=IntegerAttributeRead>;
+
+typedef struct
+{
+    UTF16_STRING Name;
+    uint32 InterpolationMode;
+    ATTRIBUTE_TYPE AttributeType;
+    uint32 NumKeys;
+    uint32 StartFrame;
+    uint32 EndFrame;
+    uint32 LoopFlags;
+    uint32 ReservedFlags;
+    float Value;
+    
+} NODE_ATTRIBUTE_FLOAT <read=FloatAttributeRead>;
+
+typedef struct
+{
+    UTF16_STRING Name;
+    uint32 InterpolationMode;
+    ATTRIBUTE_TYPE AttributeType;
+    uint32 NumKeys;
+    uint32 StartFrame;
+    uint32 EndFrame;
+    uint32 LoopFlags;
+    uint32 ReservedFlags;
+    float ValueX;
+    float ValueY;
+    float ValueZ;
+    
+} NODE_ATTRIBUTE_VEC3 <read=Vec3AttributeRead>;
+
+typedef struct
+{
+    UTF16_STRING Name;
+    uint32 InterpolationMode;
+    ATTRIBUTE_TYPE AttributeType;
+    uint32 NumKeys;
+    uint32 StartFrame;
+    uint32 EndFrame;
+    uint32 LoopFlags;
+    uint32 ReservedFlags;
+    float ValueX;
+    float ValueY;
+    float ValueZ;
+    float ValueW;
+    
+} NODE_ATTRIBUTE_VEC4 <read=Vec4AttributeRead>;
+
+typedef struct
+{
+    uint32 AttributesCount;
+    
+    for (i = 0; i < AttributesCount; ++i)
+    {
+        NODE_ATTRIBUTE_STRING StringAttribute;
+    }
+    
+} STRING_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    uint32 AttributesCount;
+    
+    for (i = 0; i < AttributesCount; ++i)
+    {
+        NODE_ATTRIBUTE_INTEGER IntegerAttribute;
+    }
+    
+} INTEGER_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    uint32 AttributesCount;
+    
+    for (i = 0; i < AttributesCount; ++i)
+    {
+        NODE_ATTRIBUTE_FLOAT FloatAttribute;
+    }
+    
+} FLOAT_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    uint32 AttributesCount;
+    
+    for (i = 0; i < AttributesCount; ++i)
+    {
+        NODE_ATTRIBUTE_VEC3 Vec3Attribute;
+    }
+    
+} VEC3_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    uint32 AttributesCount;
+    
+    for (i = 0; i < AttributesCount; ++i)
+    {
+        NODE_ATTRIBUTE_VEC4 Vec4Attribute;
+    }
+    
+} VEC4_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    STRING_ATTRIBUTES_ARRAY StringAttributes;
+    INTEGER_ATTRIBUTES_ARRAY IntegerAttributes;
+    FLOAT_ATTRIBUTES_ARRAY FloatAttributes;
+    VEC3_ATTRIBUTES_ARRAY Vec3Attributes;
+    VEC4_ATTRIBUTES_ARRAY Vec4Attributes;
+    
+} NODE_ATTRIBUTES_ARRAY;
+
+typedef struct
+{
+    float MinX;
+    float MinY;
+    float MinZ;
+    float MaxX;
+    float MaxY;
+    float MaxZ;
+    
+} NODE_BOUNDING_BOX <read=BoundingBoxRead, size=24>;
+
+typedef struct
+{
+    VEC3 Position;
+    VEC3 Normal;
+    VEC4 Color;
+    uint32 TexCoordCount;
+
+    for (j = 0; j < TexCoordCount; ++j)
+    {
+        VEC3 TexCoords;
+    }
+
+    float VertexAO_Or_MorphWeight; // Vertex Ambient Occlusion scalar / Morph blend weight
+    
+} VERTEX_DATA_RIGID <read=VertexDataRigidRead>;
+
+typedef struct
+{
+    uint32 vertexCount;
+
+    for (i = 0; i < vertexCount; ++i)
+    {
+        VERTEX_DATA_RIGID vertex;
+    }
+    
+} VERTEX_DATA_RIGID_ARRAY;
+
+typedef struct
+{
+    uint32 BoneId;
+    float Weight;
+
+} BONE_WEIGHT <size=8>;
+
+typedef struct
+{
+    VEC3 Position;
+    VEC3 Normal;
+    VEC4 Color;
+
+    uint32 TexCoordCount;
+    for (j = 0; j < TexCoordCount; ++j)
+    {
+        VEC3 TexCoords;
+    }
+
+    float VertexAO_Or_MorphWeight; // Vertex AO / Morph weight
+
+    uint32 BonesCount;
+    for (j = 0; j < BonesCount; ++j)
+    {
+        BONE_WEIGHT BoneWeight;
+    }
+
+    VEC3 Position2; // Unskinned base pose position
+    VEC3 Normal2;   // Unskinned base pose normal
+    
+} VERTEX_DATA_WEIGHTED;
+
+typedef struct
+{
+    uint32 vertexCount;
+
+    for (i = 0; i < vertexCount; ++i)
+    {
+        VERTEX_DATA_WEIGHTED vertex;
+    }
+    
+} VERTEX_DATA_WEIGHTED_ARRAY;
+
+typedef struct
+{
+    VEC3 Position;
+    
+} VERTEX_DATA_LINE <size=12>;
+
+typedef struct
+{
+    uint32 VertexCount;
+
+    for (i = 0; i < VertexCount; ++i)
+    {
+        VERTEX_DATA_LINE vertex;
+    }
+    
+} VERTEX_DATA_LINE_ARRAY;
+
+typedef struct
+{
+    uint32 Index1;
+    uint32 Index2;
+    uint32 Index3;
+    
+} TRIANGLE <read=TriangleRead, size=12>;
+
+typedef struct
+{
+    uint32 triangleCount;
+    
+    for (i = 0; i < triangleCount; ++i)
+    {
+        TRIANGLE triangle;
+    }
+    
+} TRIANGLE_ARRAY;
+
+typedef struct
+{
+    uint32 ArraySize;
+
+    local uint32 k = 0;
+    for (k = 0; k < ArraySize; ++k)
+    {
+        int32 ArrayItem;
+    }
+
+} INT_ARRAY;
+
+typedef struct
+{
+    uint32 ArraySize;
+    
+    local uint32 k = 0;
+    for (k = 0; k < ArraySize; ++k)
+    {
+        float ArrayItem;
+    }
+
+} FLOAT_ARRAY;
+
+typedef struct
+{
+    uint32 FramesCount;
+    
+    local int n = 0;
+    for (n = 0; n < FramesCount; ++n)
+    {
+        float FrameTime;
+    }
+
+} FRAMES_ARRAY;
+
+typedef struct
+{
+    uint32 TranslationsCount;
+    
+    local int n = 0;
+    for (n = 0; n < TranslationsCount; ++n)
+    {
+        VEC3 Translation;
+    }
+
+} FRAME_TRANSLATIONS_ARRAY;
+
+typedef struct
+{
+    uint32 RotationsCount;
+    
+    local int n = 0;
+    for (n = 0; n < RotationsCount; ++n)
+    {
+        VEC4 Rotation;
+    }
+
+} FRAME_ROTATIONS_ARRAY;
+
+typedef struct
+{
+    FRAMES_ARRAY TranslationFrames;
+    FRAME_TRANSLATIONS_ARRAY Translations;
+    byte ScaleTrack_Or_BBox[16]; // Animatable scale track or bounding box track
+    FRAMES_ARRAY RotationFrames;
+    FRAME_ROTATIONS_ARRAY Rotations;
+
+} ANIM_DATA;
+
+typedef struct
+{
+    local int c = 0;
+
+    UTF16_STRING Name;
+    uint32 ParentIndex;
+    VEC4 DefaultScale_Or_Pivot; // Default node scale (Sx, Sy, Sz, Sw) or pivot vector
+
+    ANIM_DATA AnimData;
+
+    int32 ParentNodeIndex; // Linkage parent node index
+    UTF16_STRING TargetLinkageName; // Target parent linkage name string
+
+    NODE_ATTRIBUTES_ARRAY Attributes;
+
+} SCENE_NODE;
+
+typedef struct
+{
+    UTF16_STRING TextureName;
+    UTF16_STRING TexturePath;
+
+} MATERIAL_TEXTURE <read=TextureRead>;
+
+typedef struct
+{
+    uint32 TexturesCount;
+    local int c = 0;
+    for (c = 0; c < TexturesCount; ++c)
+    {
+        MATERIAL_TEXTURE Texture;
+    }
+
+} MATERIAL_TEXTURES_ARRAY;
+
+typedef struct
+{
+    UTF16_STRING PropertyName;
+    int32 ParameterType;  // Light parameter type enum
+    int32 ParameterFlags; // Parameter animation/binding flags
+
+} MATERIAL_LIGHT_PROPERTY <read=PropertyLightRead>;
+
+typedef struct
+{
+    uint32 PropertiesCount;
+    local int c = 0;
+    for (c = 0; c < PropertiesCount; ++c)
+    {
+        MATERIAL_LIGHT_PROPERTY Property;
+    }
+
+} MATERIAL_LIGHT_PROPERTIES;
+
+typedef struct
+{
+    UTF16_STRING ShaderFxPath;
+    uint32 ShaderTechniqueIndex;
+    MATERIAL_TEXTURES_ARRAY Textures;
+    MATERIAL_LIGHT_PROPERTIES LightProperties;
+    FLOAT_ATTRIBUTES_ARRAY FloatAttributes;
+    INTEGER_ATTRIBUTES_ARRAY IntegerAttributes;
+    int32 Unknown;
+    VEC4_ATTRIBUTES_ARRAY Vec4Attributes;
+    int32 Unknown;
+
+} DIRECTX_MATERIAL;
+
+typedef struct
+{
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    VEC4 ColorValue;
+
+} DEFAULT_MATERIAL_COLOR_PROPERTY <read=DefaultMaterialColorRead>;
+
+typedef struct
+{
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    uint32 Unknown;
+    float FloatValue;
+
+} DEFAULT_MATERIAL_FLOAT_PROPERTY <read=DefaultMaterialFloatRead>;
+
+typedef struct
+{
+    uint32 Unknown;
+    uint32 Unknown;
+    UTF16_STRING TextureSlotName;
+    UTF16_STRING ComponentName;
+    byte UVCoordinates_AndTime[160]; // CAS2_BITMAP_MATERIAL_MAP_COORDINATES & TIME (UV tiling, offsets, rotation angle)
+    UTF16_STRING TexturePath;
+    byte CropAndAlphaSettings[72];   // CAS2_BITMAP_CROP_PLACE & Alpha source mode
+
+} BITMAP_TEXTURE <read=BitmapTextureRead>;
+
+typedef struct
+{
+    uint32 Count;
+
+    local int c = 0;
+    for (c = 0; c < Count; ++c)
+    {
+        BITMAP_TEXTURE Texture;
+    }
+
+} DEFAULT_MATERIAL_TEXTURES_ARRAY;
+
+typedef struct
+{
+    DEFAULT_MATERIAL_COLOR_PROPERTY Ambient;
+    DEFAULT_MATERIAL_COLOR_PROPERTY Diffuse;
+    DEFAULT_MATERIAL_COLOR_PROPERTY Specular;
+    DEFAULT_MATERIAL_COLOR_PROPERTY SelfIllumination;
+    DEFAULT_MATERIAL_FLOAT_PROPERTY Opacity;
+    DEFAULT_MATERIAL_FLOAT_PROPERTY Glosiness;
+    DEFAULT_MATERIAL_FLOAT_PROPERTY SpecularLevel;
+    DEFAULT_MATERIAL_FLOAT_PROPERTY SelfIllumination;
+    uint32 bWire;
+    uint32 Unknown;
+    DEFAULT_MATERIAL_TEXTURES_ARRAY TexturesArray;
+    
+} DEFAULT_MATERIAL;
+
+typedef struct
+{
+    TRIANGLE_ARRAY Triangles;
+    int32 MaterialId;
+
+} SUBMESH;
+
+typedef struct
+{
+    uint32 SubMeshesCount;
+    
+    local int k = 0;
+    for (k = 0; k < SubMeshesCount; ++k)
+    {
+        SUBMESH SubMesh;
+    }
+
+} SUBMESH_ARRAY;
+
+typedef struct
+{
+    uint32 StartVertexIndex; // Line segment start vertex index
+    uint32 EndVertexIndex;   // Line segment end vertex index
+    
+} LINE_SEGMENT;
+
+typedef struct
+{
+    local int n = 0;
+    uint32 LineSegmentsCount;
+    for (n = 0; n < LineSegmentsCount; ++n)
+    {
+        LINE_SEGMENT LineSegment;
+    }
+    
+} LINE_SEGMENTS_ARRAY;
+
+typedef struct
+{
+    VERTEX_DATA_LINE_ARRAY LineVertices;
+    LINE_SEGMENTS_ARRAY LineSegments;
+
+} LINE_DATA;
+
+typedef struct
+{
+    uint32 NodeDataLength;
+    NODE_TYPE NodeType;
+
+    if (NodeType == RIGID_MODEL)
+    {
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+
+        local int geoIndex = 0;
+        for (geoIndex = 0; geoIndex < GeometryDataCount; ++geoIndex)
+        {
+            byte UnknownData2[12];
+            FLOAT_ARRAY UnknownFloatArray;
+            
+            uint32 BoundingBoxCount;
+            for (i = 0; i < BoundingBoxCount; ++i)
+            {
+                NODE_BOUNDING_BOX BoundingBox;
+            }
+    
+            uint32 LinesCount;
+            local int line_index = 0;
+            for (line_index = 0; line_index < LinesCount; ++line_index)
+            {
+                LINE_DATA LineData;
+            }
+
+            uint32 UVWChannelCount;
+            for (i = 0; i < UVWChannelCount; ++i)
+            {
+                uint32 UVWChannelId;
+            }
+    
+            VERTEX_DATA_RIGID_ARRAY Vertices;
+            SUBMESH_ARRAY SubMeshArray;
+    
+            int32 UnknownButRelatedToVertexColors;
+        }
+    }
+
+    if (NodeType == WEIGHTED_MODEL)
+    {
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+
+        local int geoIndex = 0;
+        for (geoIndex = 0; geoIndex < GeometryDataCount; ++geoIndex)
+        {
+            byte UnknownData2[12];
+            FLOAT_ARRAY UnknownFloatArray;
+            
+            uint32 BoundingBoxCount;
+            for (i = 0; i < BoundingBoxCount; ++i)
+            {
+                NODE_BOUNDING_BOX BoundingBox;
+            }
+
+            uint32 LinesCount;
+            local int line_index = 0;
+            for (line_index = 0; line_index < LinesCount; ++line_index)
+            {
+                LINE_DATA LineData;
+            }
+
+            uint32 UVWChannelCount;
+            for (i = 0; i < UVWChannelCount; ++i)
+            {
+                uint32 UVWChannelId;
+            }
+    
+            VERTEX_DATA_WEIGHTED_ARRAY Vertices;
+            SUBMESH_ARRAY SubMeshArray;
+    
+            int32 UnknownButRelatedToVertexColors;
+        }
+    }
+
+    if (NodeType == LINE)
+    {
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+
+        local int geoIndex = 0;
+        for (geoIndex = 0; geoIndex < GeometryDataCount; ++geoIndex)
+        {
+            byte UnknownData2[12];
+            FLOAT_ARRAY UnknownFloatArray;
+            
+            uint32 BoundingBoxCount;
+            for (i = 0; i < BoundingBoxCount; ++i)
+            {
+                NODE_BOUNDING_BOX BoundingBox;
+            }
+    
+            uint32 LinesCount;
+            local int line_index = 0;
+            for (line_index = 0; line_index < LinesCount; ++line_index)
+            {
+                LINE_DATA LineData;
+            }
+    
+            int32 Unknown;
+        }
+    }
+
+    if (NodeType == SCENE_ROOT)
+    {
+        uint32 NodesCount;
+        UTF16_STRING NodeName;
+        int32 Unknown;
+        int32 Unknown;
+        byte UnknownData1[84];
+        UTF16_STRING Info;
+        int32 Unknown;
+        int32 Unknown;
+        byte UnknownData2[12];
+
+        for (j = 0; j < NodesCount - 1; ++j)
+        {
+            SCENE_NODE SceneNode;
+        }
+    }
+
+    if (NodeType == MATERIAL)
+    {
+        MATERIAL_TYPE MaterialType;
+        UTF16_STRING NodeName;
+        UTF16_STRING MaterialName;
+
+        NODE_ATTRIBUTES_ARRAY MaterialAttributes;
+
+        if (MaterialType == MATERIAL_TYPE_DEFAULT)
+        {
+            DEFAULT_MATERIAL DefaultMaterial;
+        }
+
+        if (MaterialType == MATERIAL_TYPE_DIRECTX)
+        {
+            DIRECTX_MATERIAL DirectXMaterial;
+        }
+    }
+
+    if (NodeType == DUMMY)
+    {
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+    }
+
+    if (NodeType == INSTANCE_NO_MATERIAL)
+    {
+        uint32 Unknown;
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+
+        local int geoIndex = 0;
+        for (geoIndex = 0; geoIndex < GeometryDataCount; ++geoIndex)
+        {
+            byte UnknownData2[12];
+            FLOAT_ARRAY UnknownFloatArray;
+            
+            uint32 BoundingBoxCount;
+            for (i = 0; i < BoundingBoxCount; ++i)
+            {
+                NODE_BOUNDING_BOX BoundingBox;
+            }
+    
+            uint32 OriginalNodeIndex;
+            int32 Unknown;
+        }
+    }
+
+    if (NodeType == INSTANCE_OVERRIDE_MATERIAL)
+    {
+        uint32 Unknown;
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+
+        local int geoIndex = 0;
+        for (geoIndex = 0; geoIndex < GeometryDataCount; ++geoIndex)
+        {
+            byte UnknownData2[12];
+            FLOAT_ARRAY UnknownFloatArray;
+            
+            uint32 BoundingBoxCount;
+            for (i = 0; i < BoundingBoxCount; ++i)
+            {
+                NODE_BOUNDING_BOX BoundingBox;
+            }
+    
+            uint32 OriginalNodeIndex;
+            int32 Unknown;
+            int32 Unknown;
+            uint32 MaterialId;
+        }
+    }
+
+    if (NodeType == CAMERA)
+    {
+        UTF16_STRING NodeName;
+        UTF16_STRING UnknownString;
+        UTF16_STRING UserDefinedProperties;
+        uint32 NodeIndex;
+        
+        NODE_ATTRIBUTES_ARRAY Attributes;
+        
+        uint32 GeometryDataCount;
+        byte UnknownData2[144];
+    }
+
+} NODE <read=NodeNameRead>;
+
+typedef struct
+{
+    uint32 BlockSize;
+    uint32 FormatCompatibilityVersion;
+    uint32 ObjectTypesCount;
+    uint32 LightsCount;
+    uint32 CamerasCount;
+    uint32 RigidModelsCount;
+    uint64 TotalSceneVertexCount;   // Scene-wide vertex count summary
+    uint32 WeightedModelsCount;
+    uint32 LinesCount;
+    uint32 DummiesCount;
+    uint32 MaterialsCount;
+    uint64 TotalSceneTriangleCount; // Scene-wide triangle count summary
+    uint32 InstancesCount;
+    byte SceneBBoxAndWorldMatrix[44]; // Scene bounding box (24B) + Up-axis transform matrix (20B)
+
+} SCENE_BLOCK_DATA;
+
+typedef struct
+{
+    uint32 BlockSize;
+    uint32 FrameRate_FPS; // Timeline frame rate / FPS
+
+    float StartFrameTime; // Start timeline frame / animation timestamp
+    float EndFrameTime;   // End timeline frame / animation timestamp
+
+    byte TimelineTrackMetadata[BlockSize - 16];
+
+} TIMELINE_BLOCK_DATA;
+
+typedef struct
+{
+    uint32 BlockSize;
+    uint32 MorphTrackFlags;
+    uint32 MorphSplineTrackCount;
+
+    for (i = 0; i < MorphSplineTrackCount; ++i)
+    {
+        int32 TrackId1;
+        int32 TrackId2;
+        int32 TrackId3;
+
+        FLOAT_ARRAY MorphKeyframeValues;
+        INT_ARRAY MorphVertexIndices;
+    }
+
+} MORPH_AND_SPLINE_BLOCK_DATA;
+
+typedef struct
+{
+    SCENE_BLOCK_DATA SceneInfoData;
+    TIMELINE_BLOCK_DATA unknown_block2_data;
+    MORPH_AND_SPLINE_BLOCK_DATA unknown_block3_data;
+} UNKNOWN_BLOCK;
+
+//------------------------------------------------
+// FUNCTIONS
+//------------------------------------------------
+
+string Cs2HeaderRead(FILE &instance)
+{
+    string str;
+    SPrintf(str, "%c%c%c%c", instance.char4, instance.char3, instance.char2, instance.char1);
+    return str;
+}
+
+wstring UTF16StringRead(UTF16_STRING &instance)
+{
+    if (instance.Length == 0)
+    {
+        return "";
+    }
+
+    return instance.Data;
+}
+
+string NodeNameRead(NODE &instance)
+{
+    return UTF16StringRead(instance.NodeName);
+}
+
+string StringAttributeRead(NODE_ATTRIBUTE_STRING &instance)
+{
+    return UTF16StringRead(instance.Name) + " = " + UTF16StringRead(instance.Value);
+}
+
+string IntegerAttributeRead(NODE_ATTRIBUTE_INTEGER &instance)
+{
+    string valueStr;
+    SPrintf(valueStr, "%d", instance.Value);
+    return UTF16StringRead(instance.Name) + " = " + valueStr;
+}
+
+string FloatAttributeRead(NODE_ATTRIBUTE_FLOAT &instance)
+{
+    string valueStr;
+    SPrintf(valueStr, "%f", instance.Value);
+    return UTF16StringRead(instance.Name) + " = " + valueStr;
+}
+
+string Vec3AttributeRead(NODE_ATTRIBUTE_VEC3 &instance)
+{
+    string valueStr;
+    SPrintf(valueStr, "(%f, %f, %f)", instance.ValueX, instance.ValueY, instance.ValueZ);
+    return UTF16StringRead(instance.Name) + " = " + valueStr;
+}
+
+string Vec4AttributeRead(NODE_ATTRIBUTE_VEC4 &instance)
+{
+    string valueStr;
+    SPrintf(valueStr, "(%f, %f, %f, %f)", instance.ValueX, instance.ValueY, instance.ValueZ, instance.ValueW);
+    return UTF16StringRead(instance.Name) + " = " + valueStr;
+}
+
+string Vec3Read(VEC3 &instance)
+{
+    string str;
+    SPrintf(str, "(%f, %f, %f)", instance.X, instance.Y, instance.Z);
+    return str;
+}
+
+string Vec4Read(VEC4 &instance)
+{
+    string str;
+    SPrintf(str, "(%f, %f, %f, %f)", instance.X, instance.Y, instance.Z, instance.W);
+    return str;
+}
+
+string DefaultMaterialColorRead(DEFAULT_MATERIAL_COLOR_PROPERTY &instance)
+{
+    return Vec4Read(instance.ColorValue);
+}
+
+string DefaultMaterialFloatRead(DEFAULT_MATERIAL_FLOAT_PROPERTY &instance)
+{
+    string valueStr;
+    SPrintf(valueStr, "%f", instance.FloatValue);
+    return valueStr;
+}
+
+string BoundingBoxRead(NODE_BOUNDING_BOX &instance)
+{
+    string str;
+    SPrintf(str, "min_x: %f, min_y: %f, min_z: %f, max_x: %f, max_y: %f, max_z: %f", instance.MinX, instance.MinY, instance.MinZ, instance.MaxX, instance.MaxY, instance.MaxZ);
+    return str;
+}
+
+string TextureRead(MATERIAL_TEXTURE &instance)
+{
+    return UTF16StringRead(instance.TextureName) + " = \"" + UTF16StringRead(instance.TexturePath) + "\"";
+}
+
+string TriangleRead(TRIANGLE &instance)
+{
+    string str;
+    SPrintf(str, "index_1: %d, index_2: %d, index_3: %d", instance.Index1, instance.Index2, instance.Index3);
+    return str;
+}
+
+string PropertyLightRead(MATERIAL_LIGHT_PROPERTY &instance)
+{
+    return UTF16StringRead(instance.PropertyName) + " = ";
+}
+
+string BitmapTextureRead(BITMAP_TEXTURE &instance)
+{
+    return UTF16StringRead(instance.TextureSlotName) + " " + UTF16StringRead(instance.ComponentName) + " = " + UTF16StringRead(instance.TexturePath);
+}
+
+string VertexDataRigidRead(VERTEX_DATA_RIGID &instance)
+{
+    return "Position: " + Vec3Read(instance.Position) + " Normal: " +  Vec3Read(instance.Normal);
+}
+
+//------------------------------------------------
+// FILE READ
+//------------------------------------------------
+
+HEADER Header;
+UNKNOWN_BLOCK UnknownData;
+
+local int n = 0;
+for (n = 0; n < UnknownData.SceneInfoData.CamerasCount; ++n)
+{
+    NODE CameraNode;
+}
+
+for (n = 0; n < UnknownData.SceneInfoData.RigidModelsCount; ++n)
+{
+    NODE RigidModelNode;
+}
+
+for (n = 0; n < UnknownData.SceneInfoData.WeightedModelsCount; ++n)
+{
+    NODE WeightedModel;
+}
+
+for (n = 0; n < UnknownData.SceneInfoData.LinesCount; ++n)
+{
+    NODE LineNode;
+}
+
+for (n = 0; n < UnknownData.SceneInfoData.DummiesCount; ++n)
+{
+    NODE DummyNode;
+}
+
+NODE SceneRootNode;
+
+for (n = 0; n < UnknownData.SceneInfoData.MaterialsCount; ++n)
+{
+    NODE MaterialNode;
+}
+
+for (n = 0; n < UnknownData.SceneInfoData.InstancesCount; ++n)
+{
+    NODE InstanceNode;
+}
