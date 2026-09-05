@@ -16,8 +16,7 @@ jobs:
 
       - name: Package add-on
         run: |
-          cd total_war_cs2_addon
-          zip -r "../total_war_cs2_addon-${GITHUB_REF_NAME}.zip" .
+          zip -r "total_war_cs2_addon-${GITHUB_REF_NAME}.zip" total_war_cs2_addon
 
       - name: Create release
         env:
