@@ -73,6 +73,11 @@ class CS2ParsedFileRef:
     name: str
     matrix: list[float]
     unk: int
+    # Byte range of each string, length prefix included, so a patch can splice one without a writer
+    # for the whole format. There is no offset table anywhere in .cs2.parsed - every array is
+    # count-prefixed and read in order - so re-length a string and the rest of the file just shifts.
+    key_span: tuple[int, int] = (0, 0)
+    name_span: tuple[int, int] = (0, 0)
 
 
 @dataclass
@@ -318,11 +323,23 @@ class CS2ParsedReader:
                 num_fileref = r.u32()
                 file_refs: list[CS2ParsedFileRef] = []
                 for _ in range(num_fileref):
+                    key_start = r.offset
                     f_key = r.utf16_string()
+                    name_start = r.offset
                     f_name = r.utf16_string()
+                    name_end = r.offset
                     f_mat = [r.f32() for _ in range(16)]
                     f_unk = r.u16()
-                    file_refs.append(CS2ParsedFileRef(key=f_key, name=f_name, matrix=f_mat, unk=f_unk))
+                    file_refs.append(
+                        CS2ParsedFileRef(
+                            key=f_key,
+                            name=f_name,
+                            matrix=f_mat,
+                            unk=f_unk,
+                            key_span=(key_start, name_start),
+                            name_span=(name_start, name_end),
+                        )
+                    )
 
                 # 16. eflines
                 num_efline = r.u32()

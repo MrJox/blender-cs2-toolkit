@@ -3,6 +3,7 @@ import bpy
 from bob.cli import start_skeleton_batch, start_unit_build
 from export.skeleton_exporter import export_skeleton
 from export.unit_exporter import export_unit
+from extraction.animation_extract import sample_bone_matrices
 from extraction.unit_extract import find_unit_armature, unit_model_collections
 from props.properties import (
     get_assembly_kit_root,
@@ -11,6 +12,7 @@ from props.properties import (
     UNIT_PART_KIND_ITEMS,
 )
 from validation.rules import validate_skeleton, validate_unit
+from .animation_operators import clips_for
 from .collection_utils import find_skeleton_collection, find_unit_collection
 from .operators import (
     BobWaitMixin,
@@ -161,6 +163,293 @@ class TW_OT_new_skeleton(bpy.types.Operator):
             )
         self.report({"INFO"}, f"Created '{collection.name}'. Add bones to '{armature_object.name}' in Edit Mode.")
         return {"FINISHED"}
+
+
+def _restamp_clips(old_name: str, new_name: str) -> int:
+    # An unstamped clip carries no name to correct - it belongs to whatever Armature it is on until
+    # an export stamps it - and one stamped for another skeleton genuinely belongs there, so only an
+    # exact (case-insensitive) match moves.
+    wanted = old_name.lower()
+    restamped = 0
+    for action in bpy.data.actions:
+        if action.tw_skeleton_name.lower() == wanted:
+            action.tw_skeleton_name = new_name
+            restamped += 1
+    return restamped
+
+
+class TW_OT_rename_skeleton(bpy.types.Operator):
+    bl_idname = "tw_buildings.rename_skeleton"
+    bl_label = "Rename Skeleton"
+    bl_description = (
+        "Rename this skeleton everywhere at once - its collection, its Armature, and the skeleton "
+        "stamp on every clip authored against it. Renaming the collection by hand in the Outliner "
+        "leaves those stamps naming the old skeleton"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    new_name: bpy.props.StringProperty(
+        name="New Name",
+        description=(
+            "What this skeleton exports as from now on - the .CS2 and .bone_table take this name, and "
+            "it is the name a weighted model's rules.bob quotes for BOB to resolve"
+        ),
+    )
+
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
+        skeleton = find_skeleton_collection(context)
+        if skeleton is None:
+            self.report({"ERROR"}, "Select something inside a Skeleton collection first.")
+            return {"CANCELLED"}
+        self.new_name = skeleton.name
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context: bpy.types.Context):
+        skeleton = find_skeleton_collection(context)
+        if skeleton is None:
+            self.report({"ERROR"}, "Select something inside a Skeleton collection first.")
+            return {"CANCELLED"}
+        wanted = self.new_name.strip()
+        if not wanted:
+            self.report({"ERROR"}, "A skeleton needs a name - it is what the exported files are called.")
+            return {"CANCELLED"}
+
+        old_name = skeleton.name
+        if wanted == old_name:
+            self.report({"INFO"}, f"'{old_name}' is already called that.")
+            return {"FINISHED"}
+
+        try:
+            # The collection's name is the one that counts - extraction.skeleton_name_for reads it,
+            # and it is what reaches BOB as the rules.bob AnimationType. The Armature object and its
+            # data follow so the Outliner and the panels do not disagree with the exported file.
+            skeleton.name = wanted
+            armatures = [obj for obj in skeleton.all_objects if obj.type == "ARMATURE"]
+            for armature_object in armatures:
+                armature_object.name = skeleton.name
+                armature_object.data.name = skeleton.name
+            restamped = _restamp_clips(old_name, skeleton.name)
+        except Exception as error:  # noqa: BLE001
+            self.report({"ERROR"}, f"Could not rename skeleton: {error}")
+            return {"CANCELLED"}
+
+        if skeleton.name != wanted:
+            self.report(
+                {"WARNING"},
+                f"'{wanted}' was already taken, so this skeleton is '{skeleton.name}' - which is the "
+                "name it will export under.",
+            )
+        # Models keep up on their own: an Armature modifier holds a pointer, not a name, and vertex
+        # groups are named after bones rather than the skeleton.
+        self.report(
+            {"INFO"},
+            f"Renamed '{old_name}' to '{skeleton.name}' - {len(armatures)} Armature(s) and "
+            f"{restamped} clip(s) followed.",
+        )
+        return {"FINISHED"}
+
+
+def _action_channelbags(action: bpy.types.Action):
+    # Slotted actions (Blender 4.4+) hold their curves per channelbag rather than on the Action, and
+    # the add-on still opens files authored before that - same walk validation.action_data_paths does.
+    if hasattr(action, "fcurves"):
+        yield action
+        return
+    for layer in action.layers:
+        for strip in layer.strips:
+            if strip.type != "KEYFRAME":
+                continue
+            for slot in action.slots:
+                channelbag = strip.channelbag(slot)
+                if channelbag is not None:
+                    yield channelbag
+
+
+def _bone_path_prefix(bone_name: str) -> str:
+    return f'pose.bones["{bone_name}"]'
+
+
+def _animates_bone(action: bpy.types.Action, bone_name: str) -> bool:
+    prefix = _bone_path_prefix(bone_name)
+    return any(
+        fcurve.data_path.startswith(prefix)
+        for channelbag in _action_channelbags(action)
+        for fcurve in channelbag.fcurves
+    )
+
+
+def _drop_bone_curves(action: bpy.types.Action, bone_name: str) -> None:
+    prefix = _bone_path_prefix(bone_name)
+    for channelbag in _action_channelbags(action):
+        for fcurve in [fc for fc in channelbag.fcurves if fc.data_path.startswith(prefix)]:
+            channelbag.fcurves.remove(fcurve)
+
+
+class TW_OT_remove_bone_keep_motion(bpy.types.Operator):
+    bl_idname = "tw_buildings.remove_bone_keep_motion"
+    bl_label = "Remove Bone, Keep Its Motion"
+    bl_description = (
+        "Delete the active bone from the skeleton and fold the motion it carried into its children, "
+        "in every clip of this skeleton at once. Deleting it by hand in Edit Mode instead leaves the "
+        "children standing still, because what moved them was their parent"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    inherit_bone_type: bpy.props.BoolProperty(
+        name="Give Its Bone Type To The Child",
+        description=(
+            "Pass the deleted bone's Bone Type, sort order and flags to its one child. The rules.bob "
+            "written beside a clip keeps translation only on Root and Floating bones, so a root bone's "
+            "travel is dropped at compile time if the bone that inherits it is neither"
+        ),
+        default=True,
+    )
+
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
+        if self._target(context)[0] is None:
+            return {"CANCELLED"}
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context: bpy.types.Context) -> None:
+        armature_object, bone = self._target(context)
+        layout = self.layout
+        if bone is None:
+            return
+        children = [child.name for child in bone.children]
+        clips = [
+            action for action in clips_for(armature_object) if _animates_bone(action, bone.name)
+        ]
+        layout.label(text=f"Delete '{bone.name}'", icon="BONE_DATA")
+        if children:
+            layout.label(text=f"Its motion moves to: {', '.join(children)}", icon="FORWARD")
+        else:
+            layout.label(text="It has no children - its motion is lost", icon="ERROR")
+        layout.label(text=f"{len(clips)} clip(s) will be rewritten", icon="ANIM")
+        if len(children) == 1 and bone.tw_bone_type != NO_BONE_TYPE:
+            layout.prop(self, "inherit_bone_type")
+
+    def _target(self, context: bpy.types.Context):
+        skeleton = find_skeleton_collection(context)
+        if skeleton is None:
+            self.report({"ERROR"}, "Select something inside a Skeleton collection first.")
+            return None, None
+        armature_object = next(
+            (obj for obj in skeleton.all_objects if obj.type == "ARMATURE"), None
+        )
+        if armature_object is None:
+            self.report({"ERROR"}, f"'{skeleton.name}' holds no Armature.")
+            return None, None
+        bone = armature_object.data.bones.active
+        if bone is None:
+            self.report({"ERROR"}, "Pick the bone to remove in the Armature first.")
+            return armature_object, None
+        return armature_object, bone
+
+    def execute(self, context: bpy.types.Context):
+        armature_object, bone = self._target(context)
+        if armature_object is None or bone is None:
+            return {"CANCELLED"}
+        if armature_object.mode == "EDIT":
+            self.report({"ERROR"}, "Leave Edit Mode first - the clips are rewritten in Pose space.")
+            return {"CANCELLED"}
+
+        bone_name = bone.name
+        child_names = [child.name for child in bone.children]
+        parent_name = bone.parent.name if bone.parent else ""
+        inherited = self._bone_type_of(bone) if len(child_names) == 1 and self.inherit_bone_type else None
+        scene = context.scene
+        depsgraph = context.evaluated_depsgraph_get()
+        clips = [action for action in clips_for(armature_object) if _animates_bone(action, bone_name)]
+
+        try:
+            # Every clip is sampled before the bone goes, because once it is deleted the motion it
+            # carried cannot be recovered from anywhere.
+            recorded = {
+                action.name: sample_bone_matrices(
+                    armature_object, action, child_names, scene, depsgraph
+                )
+                for action in clips
+            }
+            self._delete_bone(context, armature_object, bone_name)
+            for action in clips:
+                self._rewrite(armature_object, action, recorded[action.name], parent_name, scene, depsgraph)
+                _drop_bone_curves(action, bone_name)
+            if inherited is not None:
+                self._apply_bone_type(armature_object.data.bones[child_names[0]], inherited)
+        except Exception as error:  # noqa: BLE001
+            self.report({"ERROR"}, f"Could not remove '{bone_name}': {error}")
+            return {"CANCELLED"}
+
+        if not child_names:
+            self.report(
+                {"WARNING"},
+                f"Removed '{bone_name}' from {len(clips)} clip(s). It had no children, so the motion it "
+                "carried is gone rather than inherited.",
+            )
+            return {"FINISHED"}
+        self.report(
+            {"INFO"},
+            f"Removed '{bone_name}'. Its motion is now carried by {', '.join(child_names)} "
+            f"across {len(clips)} clip(s).",
+        )
+        return {"FINISHED"}
+
+    def _bone_type_of(self, bone) -> tuple[str, int, int]:
+        return bone.tw_bone_type, bone.tw_bone_sort_order, bone.tw_bone_flags
+
+    def _apply_bone_type(self, bone, inherited: tuple[str, int, int]) -> None:
+        bone.tw_bone_type, bone.tw_bone_sort_order, bone.tw_bone_flags = inherited
+
+    def _delete_bone(self, context: bpy.types.Context, armature_object, bone_name: str) -> None:
+        previous_active = context.view_layer.objects.active
+        context.view_layer.objects.active = armature_object
+        previous_mode = armature_object.mode
+        bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            edit_bones = armature_object.data.edit_bones
+            target = edit_bones[bone_name]
+            for child in list(target.children):
+                # A connected child is glued to its parent's tail, so re-parenting it without
+                # breaking that would drag it onto the grandparent's tail instead.
+                child.use_connect = False
+                child.parent = target.parent
+            edit_bones.remove(target)
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            if previous_mode != "OBJECT":
+                bpy.ops.object.mode_set(mode=previous_mode)
+            context.view_layer.objects.active = previous_active
+
+    def _rewrite(self, armature_object, action, recorded, parent_name, scene, depsgraph) -> None:
+        bones = armature_object.data.bones
+        parent_frames = (
+            sample_bone_matrices(armature_object, action, [parent_name], scene, depsgraph)
+            if parent_name
+            else {}
+        )
+        original_frame = scene.frame_current
+        animation_data = armature_object.animation_data_create()
+        previous_action = animation_data.action
+        animation_data.action = action
+        try:
+            for frame, matrices in sorted(recorded.items()):
+                scene.frame_set(frame)
+                for name, world in matrices.items():
+                    # The same composition importer.anim_importer.bake_clip inverts, which was
+                    # measured against a real armature: a bone's pose is its parent's pose carried
+                    # through both rest matrices, then its own basis.
+                    reference = bones[name].matrix_local
+                    if parent_name:
+                        parent_world = parent_frames[frame][parent_name]
+                        reference = parent_world @ bones[parent_name].matrix_local.inverted() @ reference
+                    pose_bone = armature_object.pose.bones[name]
+                    pose_bone.rotation_mode = "QUATERNION"
+                    pose_bone.matrix_basis = reference.inverted() @ world
+                    pose_bone.keyframe_insert(data_path="location", frame=frame)
+                    pose_bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+        finally:
+            animation_data.action = previous_action
+            scene.frame_set(original_frame)
 
 
 class TW_OT_validate_skeleton(bpy.types.Operator):
@@ -544,6 +833,8 @@ CLASSES = (
     TW_OT_new_attachment_point,
     TW_OT_bind_to_skeleton,
     TW_OT_new_skeleton,
+    TW_OT_rename_skeleton,
+    TW_OT_remove_bone_keep_motion,
     TW_OT_validate_skeleton,
     TW_OT_export_skeleton,
     TW_OT_validate_unit,

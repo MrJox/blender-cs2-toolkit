@@ -39,6 +39,8 @@ def export_animation(
     )
     warnings.extend(issue.message for issue in issues)
 
+    action.tw_skeleton_name = skeleton.name
+
     output_path = Path(bpy.path.abspath(output_dir)) / f"{clip.name}.CS2"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

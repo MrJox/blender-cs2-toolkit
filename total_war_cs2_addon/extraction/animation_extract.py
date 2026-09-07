@@ -68,6 +68,34 @@ def clip_frame_rate(action: bpy.types.Action, scene: bpy.types.Scene) -> float:
     return action.tw_frame_rate or scene.render.fps / scene.render.fps_base
 
 
+def sample_bone_matrices(
+    armature_object: bpy.types.Object,
+    action: bpy.types.Action,
+    bone_names: list[str],
+    scene: bpy.types.Scene,
+    depsgraph: bpy.types.Depsgraph,
+) -> dict[int, dict[str, mathutils.Matrix]]:
+    # Armature-space pose matrices per frame, the space bone.matrix_local is in too, so the two
+    # compose directly. Sampling by frame rather than reading keys is what lets a parent's motion be
+    # folded into a child whose own keys sit at different times.
+    start, end = action_frame_range(action, scene)
+    original_frame = scene.frame_current
+    sampled: dict[int, dict[str, mathutils.Matrix]] = {}
+    try:
+        with _posed(armature_object), _assigned(armature_object, action):
+            for frame in range(start, end + 1):
+                scene.frame_set(frame)
+                evaluated = armature_object.evaluated_get(depsgraph)
+                sampled[frame] = {
+                    name: evaluated.pose.bones[name].matrix.copy()
+                    for name in bone_names
+                    if evaluated.pose.bones.get(name) is not None
+                }
+    finally:
+        scene.frame_set(original_frame)
+    return sampled
+
+
 def _continuous(rotation: tuple[float, float, float, float], previous) -> tuple[float, float, float, float]:
     # BOB resamples the authored track, so two neighbouring keys holding q and -q - the same
     # rotation, written differently - would interpolate the long way round between them. Keep every
@@ -167,4 +195,11 @@ def extract_animation(
     return skeleton, clip, warnings
 
 
-__all__ = ["extract_animation", "sample_clip", "action_frame_range", "clip_frame_rate", "matches_rest"]
+__all__ = [
+    "extract_animation",
+    "sample_clip",
+    "sample_bone_matrices",
+    "action_frame_range",
+    "clip_frame_rate",
+    "matches_rest",
+]

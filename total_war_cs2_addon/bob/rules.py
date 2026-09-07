@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 
@@ -133,6 +134,29 @@ def _unit_override(stem: str, animation_type: str) -> str:
     return _UNIT_RULES_OVERRIDE.format(files=f"...{stem}.cs2", animation_type=animation_type)
 
 
+def _unit_override_pattern(stem: str) -> re.Pattern:
+    return re.compile(
+        r"\[\+RigidModelV2\]\r\n\t<Files> = "
+        + re.escape(f"...{stem}.cs2")
+        + r"\r\n\tAnimationType = [^\r\n]*\r\n"
+    )
+
+
+def _update_unit_overrides(text: str, parts: list[tuple[str, str]]) -> str | None:
+    # A re-export after the bound skeleton was renamed in Blender carries the same file stem but a
+    # new AnimationType - the existing override has to be replaced, not skipped as "already there",
+    # or rules.bob keeps stamping the .rigid_model_v2 with the skeleton's old name forever.
+    changed = False
+    for stem, animation_type in parts:
+        override = _unit_override(stem, animation_type)
+        if override in text:
+            continue
+        replaced, count = _unit_override_pattern(stem).subn(override[2:], text, count=1)
+        text = replaced if count else text.rstrip("\r\n") + "\r\n" + override
+        changed = True
+    return text if changed else None
+
+
 def unit_rules_text(parts: list[tuple[str, str]], target_path: str = UNIT_TARGET_PATH) -> str:
     # parts is (file stem, animation type). Every asset gets its own [+RigidModelV2] override rather
     # than sharing a section default: assets are exported one at a time, so a folder fills up over
@@ -179,11 +203,10 @@ def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[
         if not _is_addon_unit_rules(text):
             # Someone else's rules.bob - the caller warns rather than this overwriting it.
             return None
-        missing = [entry for entry in parts if f"...{entry[0]}.cs2" not in text]
-        if not missing:
+        updated = _update_unit_overrides(text, parts)
+        if updated is None:
             return None
-        appended = text.rstrip("\r\n") + "\r\n" + "".join(_unit_override(*entry) for entry in missing)
-        rules_path.write_bytes(appended.encode("ascii"))
+        rules_path.write_bytes(updated.encode("ascii"))
         return rules_path
 
     if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION):
@@ -194,6 +217,29 @@ def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[
 
 def _animation_override(stem: str, animation_type: str, fps: float) -> str:
     return _ANIMATION_RULES_OVERRIDE.format(files=f"...{stem}.cs2", animation_type=animation_type, fps=fps)
+
+
+def _animation_override_pattern(stem: str) -> re.Pattern:
+    return re.compile(
+        r"\[\+Animation\]\r\n\t<Files> = "
+        + re.escape(f"...{stem}.cs2")
+        + r"\r\n\tAnimationType = [^\r\n]*\r\n\tFPS=[^\r\n]*\r\n"
+    )
+
+
+def _update_animation_overrides(text: str, clips: list[tuple[str, str, float]]) -> str | None:
+    # Same staleness problem as _update_unit_overrides: re-exporting a clip after its skeleton was
+    # renamed must replace the existing override, not leave the old AnimationType standing because
+    # the file stem already appears somewhere in the text.
+    changed = False
+    for stem, animation_type, fps in clips:
+        override = _animation_override(stem, animation_type, fps)
+        if override in text:
+            continue
+        replaced, count = _animation_override_pattern(stem).subn(override[2:], text, count=1)
+        text = replaced if count else text.rstrip("\r\n") + "\r\n" + override
+        changed = True
+    return text if changed else None
 
 
 def animation_rules_text(clips: list[tuple[str, str, float]]) -> str:
@@ -217,11 +263,10 @@ def ensure_animation_rules(assembly_kit_root: str, cs2_path: Path, clips: list[t
         text = rules_path.read_bytes().decode("ascii", errors="replace")
         if not _is_addon_animation_rules(text):
             return None
-        missing = [clip for clip in clips if f"...{clip[0]}.cs2" not in text]
-        if not missing:
+        updated = _update_animation_overrides(text, clips)
+        if updated is None:
             return None
-        appended = text.rstrip("\r\n") + "\r\n" + "".join(_animation_override(*clip) for clip in missing)
-        rules_path.write_bytes(appended.encode("ascii"))
+        rules_path.write_bytes(updated.encode("ascii"))
         return rules_path
 
     rules_path.write_bytes(animation_rules_text(clips).encode("ascii"))
