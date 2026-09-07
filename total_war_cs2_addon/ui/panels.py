@@ -187,6 +187,22 @@ class TW_MT_shader_types(bpy.types.Menu):
             layout.operator("tw_buildings.set_shader_type", text=label).shader_type = identifier
 
 
+# Collapsed by default, and deliberately so: everything under it acts on files on disk rather than on
+# the scene, so it should not be one stray click away while an artist is building.
+class TW_PT_building_utility(WorkflowGatedPanel, bpy.types.Panel):
+    bl_label = "Utility"
+    bl_idname = "TW_PT_building_utility"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Total War"
+    bl_parent_id = "TW_PT_building_setup"
+    bl_options = {"DEFAULT_CLOSED"}
+    workflows = frozenset({"BUILDING"})
+
+    def draw(self, context: bpy.types.Context) -> None:
+        self.layout.operator("tw_buildings.batch_replace_reference_prop", icon="FILE_REFRESH")
+
+
 class TW_PT_building_setup(WorkflowGatedPanel, bpy.types.Panel):
     bl_label = "Building Setup"
     bl_idname = "TW_PT_building_setup"
@@ -411,6 +427,7 @@ CLASSES = (
     TW_MT_add_building_feature,
     TW_MT_add_display_feature,
     TW_PT_building_setup,
+    TW_PT_building_utility,
     TW_PT_collection_info,
     TW_PT_materials,
     TW_PT_validation,

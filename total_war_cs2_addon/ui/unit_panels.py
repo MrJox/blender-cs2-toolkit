@@ -150,7 +150,9 @@ class TW_PT_skeleton_setup(WorkflowGatedPanel, bpy.types.Panel):
 
         armature = armature_object.data
         box = layout.box()
-        box.label(text=skeleton.name, icon="OUTLINER_COLLECTION")
+        header = box.row(align=True)
+        header.label(text=skeleton.name, icon="OUTLINER_COLLECTION")
+        header.operator("tw_buildings.rename_skeleton", text="", icon="GREASEPENCIL")
         box.label(text=f"Exports as {skeleton.name}.CS2 + .bone_table", icon="EXPORT")
         draw_bone_table_summary(box, armature)
         box.prop(armature, "tw_reference_skeleton")
@@ -174,6 +176,39 @@ class TW_PT_skeleton_setup(WorkflowGatedPanel, bpy.types.Panel):
         bone_box.prop(bone, "tw_is_limb")
 
 
+# Collapsed by default: these rewrite the skeleton and every clip of it at once, which is not
+# something to have sitting open under the bone settings an artist is adjusting.
+class TW_PT_skeleton_utility(WorkflowGatedPanel, bpy.types.Panel):
+    bl_label = "Utility"
+    bl_idname = "TW_PT_skeleton_utility"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Total War"
+    bl_parent_id = "TW_PT_skeleton_setup"
+    bl_options = {"DEFAULT_CLOSED"}
+    workflows = frozenset({"SKELETON"})
+
+    def draw(self, context: bpy.types.Context) -> None:
+        layout = self.layout
+        skeleton = active_role_collection(context, object_section_visible(context), "SKELETON")
+        armature_object = _skeleton_armature(context, skeleton) if skeleton is not None else None
+        if armature_object is None:
+            layout.label(text="Select a skeleton first", icon="INFO")
+            return
+        bone = armature_object.data.bones.active if armature_object.mode != "EDIT" else None
+        row = layout.row()
+        # The operator acts on the active bone, so it says which one rather than leaving the artist
+        # to guess what a bare button would delete.
+        row.enabled = bone is not None
+        row.operator(
+            "tw_buildings.remove_bone_keep_motion",
+            text=f"Remove '{bone.name}', Keep Its Motion" if bone else "Remove Bone, Keep Its Motion",
+            icon="TRASH",
+        )
+        if bone is None:
+            layout.label(text="Pick a bone in the Armature to enable this", icon="INFO")
+
+
 def _skeleton_armature(context: bpy.types.Context, skeleton: bpy.types.Collection) -> bpy.types.Object | None:
     obj = context.object
     if obj is not None and obj.type == "ARMATURE" and obj.name in skeleton.all_objects:
@@ -184,6 +219,7 @@ def _skeleton_armature(context: bpy.types.Context, skeleton: bpy.types.Collectio
 CLASSES = (
     TW_PT_unit_setup,
     TW_PT_skeleton_setup,
+    TW_PT_skeleton_utility,
 )
 
 

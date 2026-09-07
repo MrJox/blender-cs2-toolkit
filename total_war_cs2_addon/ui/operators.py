@@ -1,7 +1,10 @@
 import time
+from pathlib import Path
 
 import bpy
 from bpy_extras.io_utils import ImportHelper
+
+from binary.cs2_parsed_patch import find_parsed_files, patch_folder
 
 from props.properties import get_assembly_kit_root, TW_ROLE_LABELS, TW_ROLE_DESCRIPTIONS
 from materials.fx_nodegroup import find_preview_light, sync_light
@@ -1026,6 +1029,78 @@ class TW_OT_import_file(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
+class TW_OT_batch_replace_reference_prop(bpy.types.Operator):
+    bl_idname = "tw_buildings.batch_replace_reference_prop"
+    bl_label = "Batch Replace Reference Prop"
+    bl_description = (
+        "Point every referenced prop of one name at another, across every .cs2.parsed in a folder and "
+        "its subfolders. Compiled files are patched in place - the .cs2.parsed a building references "
+        "props through is BOB's output, not something this add-on re-exports"
+    )
+    bl_options = {"REGISTER"}
+
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
+    old_name: bpy.props.StringProperty(
+        name="Replace",
+        description="The referenced prop name to look for, as it appears on a Referenced Prop empty",
+    )
+    new_name: bpy.props.StringProperty(
+        name="With",
+        description="The referenced prop name to write in its place",
+    )
+
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def draw(self, context: bpy.types.Context) -> None:
+        layout = self.layout
+        layout.prop(self, "old_name")
+        layout.prop(self, "new_name")
+        box = layout.box()
+        box.label(text="Every .cs2.parsed below this folder", icon="FILE_FOLDER")
+        box.label(text="is patched in place.", icon="BLANK1")
+
+    def execute(self, context: bpy.types.Context):
+        old = self.old_name.strip()
+        new = self.new_name.strip()
+        if not old or not new:
+            self.report({"ERROR"}, "Both the old and the new referenced prop name are needed.")
+            return {"CANCELLED"}
+        if old == new:
+            self.report({"ERROR"}, f"'{old}' is already the name being written - nothing to do.")
+            return {"CANCELLED"}
+        folder = Path(bpy.path.abspath(self.directory or ""))
+        if not folder.is_dir():
+            self.report({"ERROR"}, "Pick the folder holding the .cs2.parsed files first.")
+            return {"CANCELLED"}
+
+        found = find_parsed_files(folder)
+        if not found:
+            self.report({"ERROR"}, f"No .cs2.parsed file anywhere under {folder}.")
+            return {"CANCELLED"}
+        results = patch_folder(folder, old, new)
+
+        failed = [result for result in results if result.message]
+        changed = [result for result in results if result.changed]
+        replaced = sum(result.replaced for result in changed)
+        for result in failed:
+            self.report({"WARNING"}, f"{result.path.name} was left alone - {result.message}")
+        if not changed:
+            self.report(
+                {"WARNING"},
+                f"No file under {folder} references '{old}' - {len(found)} .cs2.parsed file(s) checked, "
+                f"{len(failed)} could not be read.",
+            )
+            return {"FINISHED"}
+        self.report(
+            {"INFO"},
+            f"Replaced '{old}' with '{new}' {replaced} time(s) across {len(changed)} of "
+            f"{len(found)} .cs2.parsed file(s).",
+        )
+        return {"FINISHED"}
+
+
 def menu_func_import(self, context):
     self.layout.operator(TW_OT_import_file.bl_idname, text="Total War (.cs2, .anim, .rigid_model_v2, ...)")
 
@@ -1052,6 +1127,7 @@ CLASSES = (
     TW_OT_bob_report,
     TW_OT_import_report,
     TW_OT_import_file,
+    TW_OT_batch_replace_reference_prop,
 )
 
 

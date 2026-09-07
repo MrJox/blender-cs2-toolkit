@@ -1014,12 +1014,26 @@ def validate_animation(
     translated = _animated_bone_names(action, "location")
     animated = rotated | translated
     unmatched = sorted(name for name in animated if name not in bones)
-    if unmatched:
+    # Only a clip with nothing in common with the skeleton is for a different one. Some bones
+    # matching and some not is what deleting a bone from the skeleton leaves behind, and it exports
+    # fine: sample_clip walks the skeleton's bones, never the Action's channels, so a channel with no
+    # bone is read by nothing. Same line anim_importer._apply_clip already draws on the way in.
+    if unmatched and len(unmatched) == len(animated):
         issues.append(
             ValidationIssue(
                 "ERROR",
                 f"'{action.name}' animates {len(unmatched)} bone(s) '{armature_object.name}' does not have "
-                f"({', '.join(unmatched[:5])}) - it belongs to a different skeleton.",
+                f"({', '.join(unmatched[:5])}) and none that it does - it belongs to a different skeleton.",
+                action.name,
+            )
+        )
+    elif unmatched:
+        issues.append(
+            ValidationIssue(
+                "WARNING",
+                f"'{action.name}' animates {len(unmatched)} bone(s) '{armature_object.name}' does not have "
+                f"({', '.join(unmatched[:5])}) - those channels will not reach the compiled .anim. Every "
+                "other animated bone exports as usual.",
                 action.name,
             )
         )
