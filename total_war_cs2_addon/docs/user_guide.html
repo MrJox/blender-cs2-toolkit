@@ -1629,17 +1629,43 @@
         <p>A shrub that is all foliage needs only Tree Leaf. A stone or a dead trunk needs only Tree. The
           game sways both shaders in the wind.</p>
 
-        <div class="note">
-          <p>Vegetation wants <b>four textures on every material</b>: Diffuse, Normal, Specular and Gloss.
-            The build tool refuses a mesh that is missing any of them, and Validate says so first. The
-            game's own trees point Specular and Gloss at shared flat swatches
-            (<code>test_gray</code>, <code>test_gloss</code>) — copying that is fine.</p>
+        <h3>Textures</h3>
+
+        <p>Vegetation wants <b>all five slots filled on every material</b> — the same five raw textures the
+          shader works with everywhere else in the add-on. The build tool refuses a mesh that leaves any of
+          them empty, and Validate tells you first.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Slot</th><th>What to put there</th></tr>
+            </thead>
+            <tbody>
+              <tr><th>Diffuse</th><td>The bark or leaf art. Leaf cards carry their shape in its alpha.</td></tr>
+              <tr><th>Normal</th><td>The normal map.</td></tr>
+              <tr><th>Gloss</th><td>The gloss map. See the naming note below — this one matters.</td></tr>
+              <tr><th>Level</th><td>Required, but it does not reach the finished model. The game's own trees
+                point it at the same flat swatch as Gloss.</td></tr>
+              <tr><th>Specular</th><td>The specular colour map.</td></tr>
+            </tbody>
+          </table>
         </div>
 
+        <p>Almost every tree in the game points Gloss, Level and Specular at shared flat swatches
+          (<code>test_gloss</code>, <code>test_gray</code>) rather than at art of its own — vegetation gloss
+          is effectively a constant. Copying that is entirely normal.</p>
+
         <div class="note warn">
-          <p><b>Name your gloss texture <code>&lt;something&gt;_gloss</code>.</b> The build tool renames it
-            on the way in, and a file already called <code>..._gloss_map</code> comes out as
-            <code>..._gloss_gloss_map</code>, which the game cannot find. Export warns you if it spots one.</p>
+          <p><b>Name your gloss texture <code>&lt;something&gt;_gloss</code>.</b> The build tool renames it to
+            <code>&lt;something&gt;_gloss_map</code> on the way in. A file already called
+            <code>..._gloss_map</code> therefore comes out as <code>..._gloss_gloss_map</code>, which the
+            game cannot find. Export warns you if it spots one.</p>
+        </div>
+
+        <div class="note">
+          <p>Open a tree from the game and its Level slot arrives empty — the finished model does not carry
+            one, so there is nothing to bring back. Re-exporting still works: the add-on feeds the Gloss map
+            through for you. Fill Level properly when you are authoring your own.</p>
         </div>
 
         <h3>Opening a tree from the game</h3>
