@@ -163,10 +163,12 @@ def build_directx_material_node(
         "t_decal_dirtmask": decal_dirtmap_texture_paths[1],
     }
 
-    # A tree material has to fill t_reflectivity as well as t_smoothness - real compiles refused the
-    # mesh for each of them in turn ("is missing texture 't_reflectivity'" / "'t_smoothness'") - but
-    # only four texture slots reach the compiled mesh, the same four the game's own vegetation
-    # carries. A tree authored with one gloss map therefore feeds both samplers from it.
+    # A tree needs all five samplers filled - blanking each in turn made BOB refuse the mesh by name -
+    # while only four reach the compiled model: t_reflectivity's own content goes nowhere, measured by
+    # compiling five distinguishable names and reading the result back. So a model imported from
+    # compiled files, which carries no level texture at all, would fail on a slot whose content is
+    # discarded anyway. Feeding it the gloss map keeps that re-export building; an authored tree fills
+    # Level itself and never reaches this.
     if rigid_material in VEGETATION_RIGID_MATERIALS and not level_texture_path:
         overrides["t_reflectivity"] = gloss_texture_path
 
