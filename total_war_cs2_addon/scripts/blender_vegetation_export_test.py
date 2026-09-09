@@ -92,9 +92,13 @@ def main() -> None:
 
     bark = [m for m in document.materials if m.material_attributes.strings[1].value == "tree_branch"][0]
     slots = {texture.texture_name: texture.texture_path for texture in bark.directx_material.textures}
-    check("the diffuse and normal are carried", slots["t_albedo"] and slots["t_normal"])
-    check("the gloss map fills t_smoothness and t_reflectivity, both of which BOB demands",
-          bool(slots["t_smoothness"]) and slots["t_reflectivity"] == slots["t_smoothness"])
+    check("all five samplers BOB demands are filled",
+          all(slots[name] for name in
+              ("t_albedo", "t_normal", "t_smoothness", "t_reflectivity", "t_specular_colour")))
+    # An imported tree has no Level texture, because the compiled model carries none - t_reflectivity
+    # is required by BOB but reaches no compiled slot, so the gloss map stands in for it.
+    check("a re-exported game tree stands the gloss map in for the Level it never had",
+          slots["t_reflectivity"] == slots["t_smoothness"])
 
     colours = {a.name: tuple(round(v, 4) for v in a.value) for a in bark.directx_material.vec4_attributes}
     bark_mesh = [mesh for mesh in source.lods[0].meshes if mesh.shader_flags == 74][0]
@@ -176,13 +180,32 @@ def main() -> None:
           read_material_def(cube.active_material).tree_colours == ((1.0,) * 4,) * 3)
     check("a hand-made model is not blocked, only warned about",
           not has_blocking_issues(validate_vegetation(built)))
-    check("and the warning names the texture slots BOB refuses a tree without",
-          any("Diffuse, Normal, Specular, Gloss" in issue.message for issue in validate_vegetation(built)))
+    check("and the warning names all five texture slots BOB refuses a tree without",
+          any("Diffuse, Normal, Gloss, Level, Specular" in issue.message
+              for issue in validate_vegetation(built)))
     hand_made = export_vegetation(built, str(OUTPUT), REPO_ROOT, bpy.context)
     check(f"and exports ({hand_made.message})", hand_made.success)
     hand_made_document = read_cs2(hand_made.cs2_path.read_bytes())
     check("as one weighted node named for its level",
           [node.node_name for node in hand_made_document.weighted_models] == ["hand_made_tree_lod01"])
+
+    print("=== an authored material keeps its own Level texture ===")
+    for name, node_name in (("bark_diffuse", "Diffuse"), ("bark_normal", "Normal"),
+                            ("bark_gloss", "Gloss"), ("bark_level", "Level"),
+                            ("bark_specular", "Specular")):
+        image = bpy.data.images.new(name, 4, 4)
+        image.filepath = f"//textures/{name}.tga"
+        cube.active_material.node_tree.nodes[node_name].image = image
+    check("a material with all five filled raises no texture warning",
+          not any("texture" in issue.message for issue in validate_vegetation(built)))
+    authored = export_vegetation(built, str(OUTPUT), REPO_ROOT, bpy.context)
+    authored_slots = {
+        texture.texture_name: Path(texture.texture_path).stem
+        for texture in read_cs2(authored.cs2_path.read_bytes()).materials[0].directx_material.textures
+    }
+    check("Level goes to t_reflectivity and the gloss map is left where it belongs",
+          authored_slots["t_reflectivity"] == "bark_level"
+          and authored_slots["t_smoothness"] == "bark_gloss")
 
     print("=== a shader that is not a tree shader is refused ===")
     cube.active_material.tw_shader_type = "default"

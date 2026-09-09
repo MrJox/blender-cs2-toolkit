@@ -94,6 +94,7 @@ def build_vegetation_cs2_document(
             diffuse_texture_path=material.diffuse_texture_path,
             normal_texture_path=material.normal_texture_path,
             gloss_texture_path=material.gloss_texture_path,
+            level_texture_path=material.level_texture_path,
             specular_texture_path=material.specular_texture_path,
             alpha_mode=material.alpha_mode,
             vec4_colours=material.tree_colours,

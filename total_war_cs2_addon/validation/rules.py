@@ -1077,10 +1077,12 @@ def validate_animation(
     return issues
 
 
-# The four slots BOB refuses a tree mesh without. Its own message names the .fx sampler
-# ("is missing texture 't_smoothness'"), which is not a name the artist ever sees, so the check that
-# saves the round trip is this one rather than reading the build log (PLAN_vegetation.md 11.5).
-_VEGETATION_REQUIRED_SLOTS = ("Diffuse", "Normal", "Specular", "Gloss")
+# The five slots BOB refuses a tree mesh without - measured one at a time, each leaving its own
+# "is missing texture 't_...'" error. That is the authored set, not the compiled one: Level reaches
+# no texture slot in the finished model, and BOB still will not build without it
+# (PLAN_vegetation.md 11.5). Its message names the .fx sampler, which is not a name the artist ever
+# sees, so this check is what saves them the round trip through the build log.
+_VEGETATION_REQUIRED_SLOTS = ("Diffuse", "Normal", "Gloss", "Level", "Specular")
 
 
 def _validate_vegetation_textures(obj: bpy.types.Object) -> list[ValidationIssue]:
@@ -1100,8 +1102,8 @@ def _validate_vegetation_textures(obj: bpy.types.Object) -> list[ValidationIssue
         ValidationIssue(
             "WARNING",
             f"'{material.name}' has no {', '.join(missing)} texture. BOB refuses a vegetation mesh that "
-            "leaves any of Diffuse, Normal, Specular or Gloss empty - the game's own trees point the "
-            "last two at shared flat swatches (test_gray, test_gloss).",
+            "leaves any of Diffuse, Normal, Gloss, Level or Specular empty - the game's own trees point "
+            "the last three at shared flat swatches (test_gloss, test_gray).",
             obj.name,
         )
     ]
