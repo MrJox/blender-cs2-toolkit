@@ -5,10 +5,15 @@ import bpy
 from binary.cs2_writer import write_cs2
 from bob.rules import (
     GLOSS_MAP_SUFFIX,
+    VEGETATION_SECTION,
+    VegetationRules,
     compiled_gloss_map_name,
     ensure_vegetation_rules,
     inside_raw_data,
+    vegetation_paths_for,
+    vegetation_rules_text,
     vegetation_rules_written_by_addon,
+    unwritten_settings_warning,
 )
 from extraction.extract import ExtractionError
 from extraction.vegetation_extract import extract_vegetation
@@ -39,11 +44,22 @@ def _gloss_naming_warnings(model) -> list[str]:
     ]
 
 
-def _rules_warnings(assembly_kit_root: str, output_path: Path, created_rules: Path | None) -> list[str]:
+def _rules_warnings(
+    assembly_kit_root: str, output_path: Path, created_rules: Path | None, settings: VegetationRules
+) -> list[str]:
     if created_rules is not None:
         return [
             f"BOB needs a rules.bob beside a tree to know it is one - wrote {created_rules}"
         ]
+    declined = unwritten_settings_warning(
+        assembly_kit_root,
+        output_path.parent,
+        VEGETATION_SECTION,
+        vegetation_rules_text(*vegetation_paths_for(assembly_kit_root, output_path), settings),
+        settings,
+    )
+    if declined is not None:
+        return [declined]
     if vegetation_rules_written_by_addon(output_path):
         return []
     if inside_raw_data(assembly_kit_root, output_path):
@@ -62,6 +78,8 @@ def export_vegetation(
     output_dir: str,
     assembly_kit_root: str,
     context: bpy.types.Context,
+    rules_settings: VegetationRules | None = VegetationRules(),
+    overwrite_rules: bool = False,
 ) -> ExportResult:
     with _evaluated_transforms(model_collection, context.view_layer):
         blocked = blocking_export_result(validate_vegetation(model_collection))
@@ -77,7 +95,17 @@ def export_vegetation(
         _write_bytes_atomically(output_path, write_cs2(document))
 
         warnings.extend(_gloss_naming_warnings(model))
-        warnings.extend(_rules_warnings(assembly_kit_root, output_path, ensure_vegetation_rules(assembly_kit_root, output_path)))
+        if rules_settings is not None:
+            warnings.extend(
+                _rules_warnings(
+                    assembly_kit_root,
+                    output_path,
+                    ensure_vegetation_rules(
+                        assembly_kit_root, output_path, rules_settings, overwrite_rules
+                    ),
+                    rules_settings,
+                )
+            )
 
         return ExportResult(
             success=True,

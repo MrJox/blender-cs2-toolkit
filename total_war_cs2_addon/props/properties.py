@@ -541,8 +541,19 @@ class TWBuildingsPreferences(bpy.types.AddonPreferences):
         default=_default_assembly_kit_root(),
     )
 
+    always_overwrite_rules: bpy.props.BoolProperty(
+        name="Always Overwrite rules.bob",
+        description=(
+            "Skip the confirmation and let an export replace an existing rules.bob whenever its "
+            "settings differ. The other sections in that file, and the per-file overrides binding "
+            "each part or clip to its skeleton, are kept either way"
+        ),
+        default=False,
+    )
+
     def draw(self, context: bpy.types.Context) -> None:
         self.layout.prop(self, "assembly_kit_root")
+        self.layout.prop(self, "always_overwrite_rules")
 
 
 def set_addon_package_name(name: str) -> None:
@@ -553,6 +564,13 @@ def set_addon_package_name(name: str) -> None:
 
 def get_assembly_kit_root(context: bpy.types.Context) -> str:
     return context.preferences.addons[_addon_package_name].preferences.assembly_kit_root
+
+
+def get_always_overwrite_rules(context: bpy.types.Context) -> bool:
+    try:
+        return context.preferences.addons[_addon_package_name].preferences.always_overwrite_rules
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def get_assembly_kit_root_or_empty() -> str:

@@ -11,7 +11,13 @@ from extraction.extract import extract_building, ExtractionError
 from scene_model.cs2_builder import build_cs2_document
 from binary.cs2_writer import write_cs2
 from bob.handoff import build_handoff_message
-from bob.rules import ensure_building_rules
+from bob.rules import (
+    BUILDING_SECTION,
+    BuildingRules,
+    building_rules_text,
+    ensure_building_rules,
+    unwritten_settings_warning,
+)
 
 
 def _write_bytes_atomically(output_path: Path, data: bytes) -> None:
@@ -124,12 +130,32 @@ def _evaluated_transforms(building_collection: bpy.types.Collection, view_layer:
             obj.hide_viewport = True
 
 
+def _building_rules_warnings(
+    assembly_kit_root: str, output_path: Path, settings: BuildingRules, created_rules: Path | None
+) -> list[str]:
+    if created_rules is not None:
+        return [
+            f"BOB needs a rules.bob beside a building to process it, and this folder had none - "
+            f"created {created_rules}"
+        ]
+    declined = unwritten_settings_warning(
+        assembly_kit_root,
+        output_path.parent,
+        BUILDING_SECTION,
+        building_rules_text(settings),
+        settings,
+    )
+    return [declined] if declined is not None else []
+
+
 @export_boundary(ExtractionError)
 def export_building(
     building_collection: bpy.types.Collection,
     output_dir: str,
     assembly_kit_root: str,
     context: bpy.types.Context,
+    rules_settings: BuildingRules | None = BuildingRules(),
+    overwrite_rules: bool = False,
 ) -> ExportResult:
     with _evaluated_transforms(building_collection, context.view_layer):
         blocked = blocking_export_result(validate_building(building_collection))
@@ -146,11 +172,16 @@ def export_building(
         data = write_cs2(document)
         _write_bytes_atomically(output_path, data)
 
-        created_rules = ensure_building_rules(assembly_kit_root, output_path)
-        if created_rules is not None:
-            warnings.append(
-                f"BOB needs a rules.bob beside a building to process it, and this folder had "
-                f"none - created {created_rules}"
+        if rules_settings is not None:
+            warnings.extend(
+                _building_rules_warnings(
+                    assembly_kit_root,
+                    output_path,
+                    rules_settings,
+                    ensure_building_rules(
+                        assembly_kit_root, output_path, rules_settings, overwrite_rules
+                    ),
+                )
             )
 
         return ExportResult(

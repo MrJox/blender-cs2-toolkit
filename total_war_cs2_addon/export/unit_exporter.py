@@ -5,10 +5,14 @@ import bpy
 
 from binary.cs2_writer import write_cs2
 from bob.rules import (
+    UNIT_SECTION,
+    UnitRules,
     ensure_unit_rules,
     inside_raw_data,
     unit_rule_in_scope,
+    unit_rules_base,
     unit_rules_written_by_addon,
+    unwritten_settings_warning,
 )
 from extraction.extract import ExtractionError
 from extraction.unit_extract import extract_unit
@@ -44,13 +48,22 @@ def _animation_type(part) -> str:
 
 
 def _rules_warnings(
-    assembly_kit_root: str, output_path: Path, animation_type: str, created_rules: Path | None
+    assembly_kit_root: str,
+    output_path: Path,
+    animation_type: str,
+    created_rules: Path | None,
+    settings: UnitRules,
 ) -> list[str]:
     if created_rules is not None:
         return [
             f"BOB needs a rules.bob beside a unit asset to know which skeleton it belongs to - "
             f"wrote {created_rules}"
         ]
+    declined = unwritten_settings_warning(
+        assembly_kit_root, output_path.parent, UNIT_SECTION, unit_rules_base(settings), settings
+    )
+    if declined is not None:
+        return [declined]
     if unit_rules_written_by_addon(output_path):
         return []
     if unit_rule_in_scope(assembly_kit_root, output_path):
@@ -72,6 +85,8 @@ def export_unit(
     output_dir: str,
     assembly_kit_root: str,
     context: bpy.types.Context,
+    rules_settings: UnitRules | None = UnitRules(),
+    overwrite_rules: bool = False,
 ) -> UnitExportResult:
     issues = validate_unit(unit_collection)
     if has_blocking_issues(issues):
@@ -96,11 +111,20 @@ def export_unit(
         document = build_unit_cs2_document(part, assembly_kit_root, output_path=str(output_path))
         _write_bytes_atomically(output_path, write_cs2(document))
 
-        animation_type = _animation_type(part)
-        created_rules = ensure_unit_rules(
-            assembly_kit_root, output_path, [(output_path.stem, animation_type)]
-        )
-        warnings.extend(_rules_warnings(assembly_kit_root, output_path, animation_type, created_rules))
+        if rules_settings is not None:
+            animation_type = _animation_type(part)
+            created_rules = ensure_unit_rules(
+                assembly_kit_root,
+                output_path,
+                [(output_path.stem, animation_type)],
+                rules_settings,
+                overwrite_rules,
+            )
+            warnings.extend(
+                _rules_warnings(
+                    assembly_kit_root, output_path, animation_type, created_rules, rules_settings
+                )
+            )
     except (ExtractionError, UnitBuildError) as error:
         return UnitExportResult(success=False, message=str(error), warnings=[], parts=[])
     # Not exporter.export_boundary: a unit batch answers with UnitExportResult, and its message

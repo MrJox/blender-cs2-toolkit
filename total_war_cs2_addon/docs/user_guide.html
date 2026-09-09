@@ -484,6 +484,7 @@
           <li><a href="#shaders">Every shader, every slot</a></li>
           <li><a href="#validate">Validate</a></li>
           <li><a href="#export">Export &amp; BOB</a></li>
+          <li><a href="#buildsettings">Build settings (rules.bob)</a></li>
           <li><a href="#import">Opening game files</a></li>
         </ul>
       </div>
@@ -1093,6 +1094,218 @@
 
         <p><b>Validate is still one at a time</b> — it checks the active asset only. Export validates
           everything in the batch itself, so nothing broken slips through either way.</p>
+      </section>
+
+
+      <hr class="rule">
+
+      <section id="buildsettings">
+        <div class="sec-head">
+          <p class="eyebrow">The basics</p>
+          <h2>Build settings (rules.bob)</h2>
+          <p>The panel in the export dialog that decides what the thing <em>is</em> in the game.</p>
+        </div>
+
+        <p>BOB does not read your <code>.CS2</code> and guess. Beside every file it builds there has to be a
+          small text file called <span class="path">rules.bob</span>, and that file is where a building's hit
+          points live, where a unit model's compiled copy is written to, and how far a tree's fire spreads.
+          The add-on writes it for you.</p>
+
+        <p>Up to now it always wrote the same values — the ones Creative Assembly ship beside their own
+          assets. The export dialog now has a <b>rules.bob</b> panel where you can change them before you
+          build, and every box starts filled in with exactly those known-good defaults. Change nothing and
+          you get the file that was written before this panel existed, byte for byte.</p>
+
+        <p>The panel covers <b>every key BOB documents</b> for the kind of thing you are exporting. The
+          handful you reach for most are shown straight away; tick <b>Show All Options</b> for the rest —
+          the ones BOB carries its own default for. Those are genuinely left out of the file until you set
+          them, which is why a defaulted export still matches CA's file exactly.</p>
+
+        <div class="note warn">
+          <p><b>The panel only works when Compile With BOB is ticked.</b> It greys out otherwise, and no
+            <span class="path">rules.bob</span> is written at all — BOB is the only thing that ever reads
+            one, so an export you are not building leaves nothing behind.</p>
+        </div>
+
+        <h3>What each workflow offers</h3>
+
+        <p>The settings are not the same from one workflow to the next, because BOB does not build a tree the
+          way it builds a soldier. You are only shown what applies to what you are exporting.</p>
+
+        <div class="kv">
+          <div>
+            <dt>Buildings</dt>
+            <dd><b>Hit Points</b> and <b>Capacity</b> — how much punishment it takes and how many men it
+              garrisons. <b>Category</b> and <b>Audio Material</b> are dropdowns of the game's own values.
+              <b>Incendiary Radius</b> (how far fire spreads over it), <b>Animation FPS</b> (the rate the
+              destruction and gate clips are resampled onto), <b>Multiple Buildings</b> and
+              <b>Texture Path</b>.
+              <br><i>Show All Options adds:</i> <b>Can Burn</b>, <b>Auxiliary</b>, <b>Joiner</b>,
+              <b>Collision 3D</b>, <b>Gun Type</b> (for a tower that shoots) and <b>Animation Type</b>.</dd>
+          </div>
+          <div>
+            <dt>Units</dt>
+            <dd><b>Skeleton (Animation Type)</b> — see below, this is the one that decides what a model is
+              rigged to. <b>Target Path</b>, where under <span class="path">working_data</span> the compiled
+              model is written: it is this, not the folder you exported the <code>.CS2</code> into, that
+              decides where the built model lands, and the "BOB finished" dialog follows whatever you set
+              here. Plus <b>Texture Folder</b>, <b>Texture Sub-folder</b> and <b>Save AGF</b>.
+              <br><i>Show All Options adds:</i> <b>Target Filename</b>, <b>Target Extension</b>,
+              <b>Rigid Category</b>, <b>Update Database</b>, <b>Single LOD</b>,
+              <b>Variable Bones Per Vert</b>, <b>Disable Alpha Test</b> and four
+              <b>LOD switch distances</b>.</dd>
+          </div>
+          <div>
+            <dt>Animation</dt>
+            <dd><b>Skeleton (Animation Type)</b>, then the seven <b>channel</b> switches plus <b>Ignore
+              Metadata</b>. The channels decide what survives into the compiled clip: with them all off —
+              the way CA ship them — a clip keeps rotation only, except on the root and the floating weapon
+              bones. Turn <b>Core Translations</b> on if your clip really does move the body bones as well
+              as turning them.
+              <br><i>Show All Options adds:</i> <b>Target Path</b> and the whole <b>Cinematic</b> set — its
+              own skeleton and its own seven channel switches, used when the clip is built for a cutscene.</dd>
+          </div>
+          <div>
+            <dt>Vegetation</dt>
+            <dd><b>Build the Fire Hull</b> (leave it on, or the tree cannot catch fire), <b>Incendiary
+              Radius</b> — how densely the fire emitters are spread over that hull — and the four
+              <b>LOD switch distances</b>.
+              <br><i>Show All Options adds:</i> <b>Target Path</b>, <b>Texture Folder</b> and
+              <b>Texture Sub-folder</b> (all three worked out for you when left empty), the same seven
+              shared model keys the Units panel has, and <b>Animation Type</b>.</dd>
+          </div>
+          <div>
+            <dt>Skeletons</dt>
+            <dd>Just <b>Target Path</b>. A skeleton's other two rule values are fixed by what a skeleton
+              <em>is</em>, so there is nothing else to choose.</dd>
+          </div>
+        </div>
+
+        <h3>Skeleton (Animation Type)</h3>
+
+        <p>This is the setting that decides what a unit model is rigged to, or which skeleton an animation
+          clip is built against — BOB stamps it straight into the compiled file. <b>It is filled in for you
+          from the scene</b>, and it works as a <b>folder default</b>:</p>
+
+        <ul>
+          <li><b>Every asset you export gets its own line</b> naming the skeleton it is bound to in Blender,
+            and that line wins. Export a body bound to <code>rome_man_game</code> and a shield bound to
+            nothing, into one folder, and each is built correctly without you setting anything.</li>
+          <li><b>This box covers everything else in the folder</b> — a <code>.CS2</code> you dropped in by
+            hand, or one built by other means. Left empty, such a file compiles with no skeleton at all,
+            which is right for weapons, shields and props and wrong for a body.</li>
+        </ul>
+
+        <div class="kv">
+          <div>
+            <dt>Exporting unit models</dt>
+            <dd>The box arrives holding the skeleton the selected assets are bound to. Select a batch that
+              all share one skeleton and you get that one; select assets bound to two different skeletons,
+              or none at all, and the box is left empty — every asset still carries its own line either way.</dd>
+          </div>
+          <div>
+            <dt>Exporting animation</dt>
+            <dd>The box arrives holding the skeleton whose clips you are exporting — the same one the clip
+              list was built from, so it always agrees with what the per-clip lines will say.</dd>
+          </div>
+        </div>
+
+        <p>It is a plain text box, so you can still type over it — useful when the folder you are building
+          into holds files this export knows nothing about.</p>
+
+        <h3>LOD switch distances</h3>
+
+        <p>The four boxes arrive holding <b>100, 200, 400 and 500</b> — which is not a guess, it is exactly
+          what BOB puts in a compiled model when nothing tells it otherwise. So the numbers you see are the
+          numbers you will get.</p>
+
+        <p>Because they already match, an untouched ladder is <b>not written to
+          <span class="path">rules.bob</span> at all</b>. Move any one rung and all four are written
+          together — a ladder with one rung named and three missing is not a ladder.</p>
+
+        <div class="note">
+          <p>Confirmed against BOB: a weighted model whose folder default said <code>rome_man_game</code>,
+            and which had no line of its own, compiled with <code>rome_man_game</code> as its bone table
+            name.</p>
+        </div>
+
+        <details>
+          <summary>Why a few keys are still not offered</summary>
+          <div>
+            <ul>
+              <li><b>The generated tree billboard.</b> The key that turns it on crashes BOB outright on
+                Attila's kit — measured under a debugger, on a plain model as well as on a tree. There is
+                nothing an artist could do with it, so it is not offered. A built tree has no far-distance
+                billboard as a result.</li>
+              <li><b>Export As Reference Pose</b> is what separates a skeleton from a clip. It is not a
+                choice; it follows from which button you pressed.</li>
+              <li><b>Animation Type on a building or a tree</b> is offered, but under Show All Options and
+                with a warning: set it to anything but <code>building</code> or <code>tree</code> and BOB
+                recognises nothing to do with the file, so the export finishes having built nothing.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details>
+          <summary>Where the Category and Audio Material lists come from</summary>
+          <div>
+            <p>Both dropdowns are the game's own enum tables, read out of the Assembly Kit:
+              <span class="path">raw_data/db/battlefield_building_categories.xml</span> (nine categories)
+              and <span class="path">raw_data/db/audio_materials_enums.xml</span> (twenty-eight materials).</p>
+            <p>BOB's own built-in documentation lists something else entirely — three audio materials and a
+              set of categories like <code>armoury</code> and <code>command_HQ</code>. That text is left over
+              from an older game and is wrong for Attila: it does not even contain <code>generic</code>, the
+              category CA's own <span class="path">rules.bob</span> files use. A real build confirmed it —
+              BOB accepted <code>fort_tower</code> and <code>bronze</code> and wrote both into the database
+              row it generated.</p>
+          </div>
+        </details>
+
+        <h3>When a rules.bob is already there</h3>
+
+        <p>A folder often already has one — you exported into it before, or you are working inside one of the
+          game's own folders. What happens next depends on whether you changed anything:</p>
+
+        <div class="kv">
+          <div>
+            <dt>You left the settings alone</dt>
+            <dd>The existing file is not touched, exactly as before. If it is one the add-on wrote, a new unit
+              model or animation clip is still added to it — that is not a change to your settings, so nothing
+              interrupts you.</dd>
+          </div>
+          <div>
+            <dt>You changed something</dt>
+            <dd>A dialog appears before anything is written, listing every value that would change — old on
+              the left, yours on the right. <b>Overwrite</b> writes them and carries on with the export.
+              <b>Cancel</b> exports nothing and leaves the file exactly as it was.</dd>
+          </div>
+        </div>
+
+        <div class="note">
+          <p><b>Overwriting is not destructive to the rest of the file.</b> Only the one section the add-on
+            owns is replaced. Every other section stays, and so does every per-file line binding another
+            model or clip to its skeleton — re-exporting one part of a folder never costs the others theirs.</p>
+        </div>
+
+        <p>A folder with no <span class="path">rules.bob</span> of its own can still inherit one from a folder
+          above it, which BOB reads instead. Left at their defaults, your settings agree with it and it is
+          left to do its job. Change something and the add-on writes a local file, which wins over the
+          inherited one.</p>
+
+        <details>
+          <summary>Never being asked again</summary>
+          <div>
+            <p><b>Edit &gt; Preferences &gt; Add-ons &gt; Blender CS2 All-in-One Kit &gt; Always Overwrite
+              rules.bob.</b> Turn it on and the confirmation stops appearing — an export whose settings differ
+              just writes them. Everything else is unchanged: other sections and per-file lines are still
+              kept, and a folder you have not customised is still left alone.</p>
+            <p>Blender running in the background has nobody to ask, so it never overwrites. It leaves the file
+              alone and says so in the export warnings instead.</p>
+          </div>
+        </details>
+
+        <p>The settings reset to their defaults when you restart Blender. Within a session Blender remembers
+          what you last used, so a run of exports into the same folder only needs setting up once.</p>
       </section>
 
       <hr class="rule">

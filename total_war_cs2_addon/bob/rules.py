@@ -1,5 +1,6 @@
 import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 RULES_FILENAME = "rules.bob"
@@ -15,45 +16,254 @@ DB_TABLES = (
     ("battlefield_buildings_tables", "battlefield_buildings"),
 )
 
-# Byte-identical to the rules.bob CA ships beside their own buildings - raw_data's `eastern` and
-# `gondorean` architecture folders both carry exactly this file. BOB parses rules.bob as CRLF INI.
-_BUILDING_RULES = (
-    "[Building]\r\n"
-    "\tTexturePath = RigidModels\\Buildings\\Textures\\\r\n"
-    "\tAnimationFPS = 20\r\n"
-    "\tanimation_type = building\r\n"
-    "\tAudioMaterial = wood\r\n"
-    "\tCapacity = 500\r\n"
-    "\tCategory = generic\r\n"
-    "\tHitPoints = 500\r\n"
-    "\tMultipleBuildings = true\r\n"
-    "\tIncendiaryRadius = 9.0\r\n"
+
+def _flag(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _decimal(value: float) -> str:
+    # BOB's own files write 9.0 and 2.0, not 9 and 2, so a whole number keeps its decimal point.
+    text = f"{value:g}"
+    return text if "." in text else text + ".0"
+
+
+def _line(key: str, value, separator: str = " = ") -> str:
+    return f"\t{key}{separator}{_flag(value) if isinstance(value, bool) else value}\r\n"
+
+
+def _optional(key: str, value, separator: str = " = ") -> str:
+    # Every key BOB documents as having its own default is left out of the file entirely until the
+    # artist sets it. That is what keeps a defaulted export byte-identical to the file CA ships,
+    # while still letting every supported key be reached.
+    if value is None or value == "":
+        return ""
+    return _line(key, value, separator)
+
+
+def _is_customised(settings) -> bool:
+    return settings is not None and settings != type(settings)()
+
+
+# raw_data/db/battlefield_building_categories.xml - the game's own enum table, all nine rows. BOB's
+# documentation string lists Empire's categories instead (armoury, barracks, command_HQ, ...) and is
+# stale: `generic`, which CA's own rules.bob files use, is not in it.
+BUILDING_CATEGORIES = (
+    "bridge",
+    "fort_tower",
+    "fort_wall",
+    "gate",
+    "generic",
+    "ground_platform",
+    "incidental",
+    "unbreachable_fort_wall",
+    "vaultable",
 )
+
+# raw_data/db/audio_materials_enums.xml, all twenty-eight rows. BOB documents only "brick, stone,
+# wood" - stale in the same way.
+AUDIO_MATERIALS = (
+    "axe",
+    "body",
+    "brick",
+    "bronze",
+    "chainmail",
+    "cloth",
+    "club",
+    "deep_water",
+    "falx",
+    "forest",
+    "glass",
+    "grass",
+    "leather",
+    "metal",
+    "mud",
+    "road",
+    "rock",
+    "sand",
+    "scrub",
+    "segmented",
+    "shallow_water",
+    "snow",
+    "spear",
+    "stone",
+    "sword",
+    "sword_long",
+    "wicker",
+    "wood",
+)
+
+
+@dataclass(frozen=True)
+class BuildingRules:
+    texture_path: str = "RigidModels\\Buildings\\Textures\\"
+    animation_fps: int = 20
+    animation_type: str = "building"
+    audio_material: str = "wood"
+    capacity: int = 500
+    category: str = "generic"
+    hit_points: int = 500
+    multiple_buildings: bool = True
+    incendiary_radius: float = 9.0
+    can_burn: bool | None = None
+    auxiliary: bool | None = None
+    joiner: bool | None = None
+    collision_3d: bool | None = None
+    gun_type: str = ""
+
+
+UNIT_TARGET_PATH = "VariantMeshes\\_VariantModels\\"
+
+# What BOB writes into a compiled model's LOD chain when the rule names no LODDistance at all.
+# Measured: a four-LOD part built against a rules.bob carrying none came out 100/200/400/500, which
+# is also what 23 of the 28 unit models in the corpus carry and what CA's own tree rules.bob spells
+# out by hand.
+DEFAULT_LOD_DISTANCES = (100, 200, 400, 500)
+
+
+@dataclass(frozen=True)
+class UnitRules:
+    target_path: str = UNIT_TARGET_PATH
+    texture_folder: str = UNIT_TARGET_PATH
+    texture_subfolder: str = "tex"
+    animation_type: str = ""
+    save_agf: bool = True
+    target_filename: str = ""
+    target_extension: str = ""
+    rigid_category: str = ""
+    update_database: bool | None = None
+    single_lod: bool | None = None
+    variable_bones_per_vert: bool | None = None
+    disable_alpha_test: bool | None = None
+    lod_distance_1: int | None = None
+    lod_distance_2: int | None = None
+    lod_distance_3: int | None = None
+    lod_distance_4: int | None = None
+
+
+@dataclass(frozen=True)
+class AnimationRules:
+    core_translations: bool = False
+    face_translations: bool = False
+    face_rotations: bool = False
+    left_hand_translations: bool = False
+    left_hand_rotations: bool = False
+    right_hand_translations: bool = False
+    right_hand_rotations: bool = False
+    ignore_metadata: bool = True
+    animation_type: str = ""
+    target_path: str = ""
+    cinematic_animation_type: str = ""
+    cinematic_core_translations: bool | None = None
+    cinematic_face_translations: bool | None = None
+    cinematic_face_rotations: bool | None = None
+    cinematic_left_hand_translations: bool | None = None
+    cinematic_left_hand_rotations: bool | None = None
+    cinematic_right_hand_translations: bool | None = None
+    cinematic_right_hand_rotations: bool | None = None
+
+
+@dataclass(frozen=True)
+class SkeletonRules:
+    target_path: str = ""
+
+
+@dataclass(frozen=True)
+class VegetationRules:
+    animation_type: str = "tree"
+    create_description_file: bool = True
+    incendiary_radius: float = 2.0
+    lod_distance_1: int = DEFAULT_LOD_DISTANCES[0]
+    lod_distance_2: int = DEFAULT_LOD_DISTANCES[1]
+    lod_distance_3: int = DEFAULT_LOD_DISTANCES[2]
+    lod_distance_4: int = DEFAULT_LOD_DISTANCES[3]
+    target_path: str = ""
+    texture_folder: str = ""
+    texture_subfolder: str = ""
+    target_filename: str = ""
+    target_extension: str = ""
+    rigid_category: str = ""
+    update_database: bool | None = None
+    single_lod: bool | None = None
+    variable_bones_per_vert: bool | None = None
+    disable_alpha_test: bool | None = None
+
+
+# The keys every [RigidModelV2] section shares, in BOB's own documented order. Units and vegetation
+# differ only in what they put above them.
+def _rigid_model_extras(settings) -> str:
+    return (
+        _optional("TargetFilename", settings.target_filename)
+        + _optional("TargetExtension", settings.target_extension)
+        + _optional("RigidCategory", settings.rigid_category)
+        + _optional("UpdateDatabase", settings.update_database)
+        + _optional("SingleLOD", settings.single_lod)
+        + _optional("VariableBonesPerVert", settings.variable_bones_per_vert)
+        + _optional("DisableAlphaTest", settings.disable_alpha_test)
+    )
+
+
+# With every field left at its default this is byte-identical to the rules.bob CA ships beside their
+# own buildings - raw_data's `eastern` and `gondorean` architecture folders both carry exactly this
+# file. BOB parses rules.bob as CRLF INI. The five keys BOB refuses to run without are TexturePath,
+# Capacity, HitPoints, AudioMaterial and Category ("Rule not found defining '<key>'" in
+# BOB_Building.AssemblyKit.dll); the rest carry BOB's own defaults and are written only once set.
+def building_rules_text(settings: BuildingRules | None = None) -> str:
+    settings = settings or BuildingRules()
+    return (
+        "[Building]\r\n"
+        + _line("TexturePath", settings.texture_path)
+        + _line("AnimationFPS", settings.animation_fps)
+        + _line("animation_type", settings.animation_type)
+        + _line("AudioMaterial", settings.audio_material)
+        + _line("Capacity", settings.capacity)
+        + _line("Category", settings.category)
+        + _line("HitPoints", settings.hit_points)
+        + _line("MultipleBuildings", settings.multiple_buildings)
+        + _line("IncendiaryRadius", _decimal(settings.incendiary_radius))
+        + _optional("CanBurn", settings.can_burn)
+        + _optional("Auxiliary", settings.auxiliary)
+        + _optional("Joiner", settings.joiner)
+        + _optional("Collision3D", settings.collision_3d)
+        + _optional("GunType", settings.gun_type)
+    )
+
 
 # Byte-identical to the rules.bob CA ships beside rome_man_game, the Assembly Kit's only skeleton.
 # ExportAsReferencePose is what makes BOB compile the .cs2 as a rest pose rather than a clip, and
 # AnimationType is deliberately the literal "not_used" here - a skeleton has no skeleton of its own.
-_SKELETON_RULES = (
-    "[Animation]\r\n"
-    "\t<FILES> = ....cs2\r\n"
-    "\tAnimationType = not_used\r\n"
-    "\tExportAsReferencePose = true\r\n"
-    "\r\n"
-)
+# Both are what a skeleton *is*, so neither is a setting; TargetPath is the one key left to choose.
+def skeleton_rules_text(settings: SkeletonRules | None = None) -> str:
+    settings = settings or SkeletonRules()
+    return (
+        "[Animation]\r\n"
+        "\t<FILES> = ....cs2\r\n"
+        "\tAnimationType = not_used\r\n"
+        "\tExportAsReferencePose = true\r\n"
+        + _optional("TargetPath", settings.target_path)
+        + "\r\n"
+    )
 
 
 # Modelled on the rules.bob CA ships at raw_data/variantmeshes/VariantModels/, the folder every
-# authored unit part lives under. AnimationType is the whole point: PLAN_units.md 1.8 established
-# that it, not any CS2 field, is what BOB stamps into the compiled header's m_bone_table_name - the
-# skeleton name for a weighted part, and deliberately empty for a weapon, shield or prop.
-_UNIT_RULES_TEMPLATE = (
-    "[RigidModelV2]\r\n"
-    "\tTargetPath = {target_path}\r\n"
-    "\tTextureFolder = {target_path}\r\n"
-    "\tTextureSubFolder=tex\r\n"
-    "\tAnimationType = {animation_type}\r\n"
-    "\tSaveAGF = true\r\n"
-)
+# authored unit part lives under. AnimationType here is the folder's default - the skeleton BOB
+# stamps into the compiled header's m_bone_table_name (PLAN_units.md 1.8) for any file no
+# [+RigidModelV2] override names. Each exported part still gets its own override from the skeleton
+# it is bound to in Blender, and an override wins over this.
+def unit_rules_base(settings: UnitRules | None = None) -> str:
+    settings = settings or UnitRules()
+    return (
+        "[RigidModelV2]\r\n"
+        + _line("TargetPath", settings.target_path)
+        + _line("TextureFolder", settings.texture_folder)
+        + _line("TextureSubFolder", settings.texture_subfolder, separator="=")
+        + _line("AnimationType", settings.animation_type)
+        + _line("SaveAGF", settings.save_agf)
+        + _rigid_model_extras(settings)
+        + _optional("LODDistance1", settings.lod_distance_1)
+        + _optional("LODDistance2", settings.lod_distance_2)
+        + _optional("LODDistance3", settings.lod_distance_3)
+        + _optional("LODDistance4", settings.lod_distance_4)
+    )
 
 # One override section per part whose skeleton differs from the folder default, in CA's own
 # [+RigidModelV2] <Files> form - a folder can hold a weighted body and a rigid weapon at once, and
@@ -70,17 +280,29 @@ _UNIT_RULES_OVERRIDE = (
 # channel flags are what make a compiled clip rotation-only except on the root and floating bones -
 # CA sets all seven false on every animation folder in the kit, and the compiled output matches
 # (sws_run_443_cm keeps 6 translation tracks out of 50 bones).
-_ANIMATION_RULES_TEMPLATE = (
-    "[Animation]\r\n"
-    "\tCoreTranslations = false\r\n"
-    "\tFaceTranslations = false\r\n"
-    "\tFaceRotations = false\r\n"
-    "\tLeftHandTranslations = false\r\n"
-    "\tLeftHandRotations = false\r\n"
-    "\tRightHandTranslations = false\r\n"
-    "\tRightHandRotations = false\r\n"
-    "\tIgnoreMetadata = true\r\n"
-)
+def animation_rules_base(settings: AnimationRules | None = None) -> str:
+    settings = settings or AnimationRules()
+    return (
+        "[Animation]\r\n"
+        + _line("CoreTranslations", settings.core_translations)
+        + _line("FaceTranslations", settings.face_translations)
+        + _line("FaceRotations", settings.face_rotations)
+        + _line("LeftHandTranslations", settings.left_hand_translations)
+        + _line("LeftHandRotations", settings.left_hand_rotations)
+        + _line("RightHandTranslations", settings.right_hand_translations)
+        + _line("RightHandRotations", settings.right_hand_rotations)
+        + _line("IgnoreMetadata", settings.ignore_metadata)
+        + _optional("AnimationType", settings.animation_type)
+        + _optional("TargetPath", settings.target_path)
+        + _optional("CinematicAnimationType", settings.cinematic_animation_type)
+        + _optional("CinematicCoreTranslations", settings.cinematic_core_translations)
+        + _optional("CinematicFaceTranslations", settings.cinematic_face_translations)
+        + _optional("CinematicFaceRotations", settings.cinematic_face_rotations)
+        + _optional("CinematicLeftHandTranslations", settings.cinematic_left_hand_translations)
+        + _optional("CinematicLeftHandRotations", settings.cinematic_left_hand_rotations)
+        + _optional("CinematicRightHandTranslations", settings.cinematic_right_hand_translations)
+        + _optional("CinematicRightHandRotations", settings.cinematic_right_hand_rotations)
+    )
 
 # One override per clip, in the same [+Section] <Files> form CA uses for unit parts: a folder fills
 # up over several exports, and each clip carries its own skeleton and its own sampling rate.
@@ -95,7 +317,6 @@ _ANIMATION_RULES_OVERRIDE = (
 ANIMATION_SECTION = SKELETON_SECTION
 
 UNIT_SECTION = "[rigidmodelv2]"
-UNIT_TARGET_PATH = "VariantMeshes\\_VariantModels\\"
 BACKSLASH = "\\"
 
 
@@ -119,12 +340,36 @@ def skeleton_rule_in_scope(assembly_kit_root: str, cs2_path: Path) -> bool:
     return _rule_in_scope(assembly_kit_root, cs2_path, SKELETON_SECTION)
 
 
-def ensure_building_rules(assembly_kit_root: str, cs2_path: Path) -> Path | None:
-    return _ensure_rules(assembly_kit_root, cs2_path, BUILDING_SECTION, _BUILDING_RULES)
+def ensure_building_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    settings: BuildingRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
+    return _ensure_rules(
+        assembly_kit_root,
+        cs2_path,
+        BUILDING_SECTION,
+        building_rules_text(settings),
+        _is_customised(settings),
+        overwrite,
+    )
 
 
-def ensure_skeleton_rules(assembly_kit_root: str, cs2_path: Path) -> Path | None:
-    return _ensure_rules(assembly_kit_root, cs2_path, SKELETON_SECTION, _SKELETON_RULES)
+def ensure_skeleton_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    settings: SkeletonRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
+    return _ensure_rules(
+        assembly_kit_root,
+        cs2_path,
+        SKELETON_SECTION,
+        skeleton_rules_text(settings),
+        _is_customised(settings),
+        overwrite,
+    )
 
 
 def unit_rule_in_scope(assembly_kit_root: str, cs2_path: Path) -> bool:
@@ -158,20 +403,22 @@ def _update_unit_overrides(text: str, parts: list[tuple[str, str]]) -> str | Non
     return text if changed else None
 
 
-def unit_rules_text(parts: list[tuple[str, str]], target_path: str = UNIT_TARGET_PATH) -> str:
+def unit_rules_text(parts: list[tuple[str, str]], settings: UnitRules | None = None) -> str:
     # parts is (file stem, animation type). Every asset gets its own [+RigidModelV2] override rather
     # than sharing a section default: assets are exported one at a time, so a folder fills up over
     # several exports and each file has to carry its own skeleton name. The base section holds only
     # what they all share, with an empty AnimationType - which is also the right answer for a
     # weapon or a prop that no override names.
-    text = _UNIT_RULES_TEMPLATE.format(target_path=target_path, animation_type="")
+    text = unit_rules_base(settings)
     for stem, animation_type in parts:
         text += _unit_override(stem, animation_type)
     return text
 
 
+# Key presence, not the shipped values: a customised TextureSubFolder or an unticked SaveAGF still
+# has to read as ours. SaveAGF is also what tells a unit's [RigidModelV2] from a tree's.
 def _is_addon_unit_rules(text: str) -> bool:
-    return "TextureSubFolder=tex" in text and "SaveAGF = true" in text
+    return _section_has_keys(text, UNIT_SECTION, ("TextureSubFolder", "SaveAGF"))
 
 
 def inside_raw_data(assembly_kit_root: str, cs2_path: Path) -> bool:
@@ -192,15 +439,31 @@ def unit_rules_written_by_addon(cs2_path: Path) -> bool:
     return _is_addon_unit_rules(text)
 
 
-def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[str, str]]) -> Path | None:
+def ensure_unit_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    parts: list[tuple[str, str]],
+    settings: UnitRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
     if not inside_raw_data(assembly_kit_root, cs2_path):
         return None
 
+    base = unit_rules_base(settings)
     rules_path = Path(cs2_path).parent / RULES_FILENAME
     if rules_path.exists():
         # Bytes, not read_text: universal newlines would turn the file's CRLF into LF and appending
         # to it would leave a rules.bob with mixed line endings.
-        text = rules_path.read_bytes().decode("ascii", errors="replace")
+        text = _read_rules(rules_path)
+        if base_section_changes(text, UNIT_SECTION, base):
+            # The base section is not what this export asks for - someone else's file, or ours from
+            # before the settings changed. Replacing it keeps every [+RigidModelV2] override already
+            # there, so the other parts sharing the folder keep their skeletons.
+            if not (_is_customised(settings) and overwrite):
+                return None
+            kept = base + _overrides_of(text)
+            rules_path.write_bytes((_update_unit_overrides(kept, parts) or kept).encode("ascii"))
+            return rules_path
         if not _is_addon_unit_rules(text):
             # Someone else's rules.bob - the caller warns rather than this overwriting it.
             return None
@@ -210,9 +473,9 @@ def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[
         rules_path.write_bytes(updated.encode("ascii"))
         return rules_path
 
-    if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION):
+    if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION) and not _is_customised(settings):
         return None
-    rules_path.write_bytes(unit_rules_text(parts).encode("ascii"))
+    rules_path.write_bytes(unit_rules_text(parts, settings).encode("ascii"))
     return rules_path
 
 
@@ -230,19 +493,27 @@ def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[
 #   - LODDistance1..4 are the fixed ladder; which rung a mesh lands on comes from its node's
 #     _lodNN postfix, not from the order the nodes appear in.
 # `Tree = true`, the billboard switch, is deliberately absent - see the note below it.
-_VEGETATION_RULES_TEMPLATE = (
-    "[RigidModelV2]\r\n"
-    "\tTargetPath = {target_path}\r\n"
-    "\tTextureFolder = {texture_folder}\r\n"
-    "\tTextureSubFolder={texture_subfolder}\r\n"
-    "\tAnimationType = tree\r\n"
-    "\tCreateRigidModelDescriptionFile = true\r\n"
-    "\tIncendiaryRadius = 2.0\r\n"
-    "\tLODDistance1 = 100\r\n"
-    "\tLODDistance2 = 200\r\n"
-    "\tLODDistance3 = 400\r\n"
-    "\tLODDistance4 = 500\r\n"
-)
+# The three paths default to empty and are derived by vegetation_paths_for from where the .CS2 sits
+# inside raw_data, so a batch exporting into one folder still lands each model where the game's own
+# trees live. A setting fills in only when the artist overrides one.
+def vegetation_rules_base(
+    target_path: str, texture_folder: str, texture_subfolder: str, settings: "VegetationRules | None" = None
+) -> str:
+    settings = settings or VegetationRules()
+    return (
+        "[RigidModelV2]\r\n"
+        + _line("TargetPath", settings.target_path or target_path)
+        + _line("TextureFolder", settings.texture_folder or texture_folder)
+        + _line("TextureSubFolder", settings.texture_subfolder or texture_subfolder, separator="=")
+        + _line("AnimationType", settings.animation_type)
+        + _line("CreateRigidModelDescriptionFile", settings.create_description_file)
+        + _line("IncendiaryRadius", _decimal(settings.incendiary_radius))
+        + _line("LODDistance1", settings.lod_distance_1)
+        + _line("LODDistance2", settings.lod_distance_2)
+        + _line("LODDistance3", settings.lod_distance_3)
+        + _line("LODDistance4", settings.lod_distance_4)
+        + _rigid_model_extras(settings)
+    )
 
 # Setting `Tree = true` - the key whose own documentation string is "True if tree billboard
 # processing is required" - makes BOB dereference a null pointer inside
@@ -253,10 +524,11 @@ _VEGETATION_RULES_TEMPLATE = (
 # warning on every correct export is noise.
 
 # BOB does not copy the gloss map's filename through the way it does the diffuse and the normal: it
-# rebuilds it as <everything before the source's last underscore>_gloss_map.dds. Measured by feeding
-# it two sources with no underscore at all, which produced a bare "_gloss_map.dds". So the game's own
-# test_gloss_map.dds was authored as test_gloss.tga, and re-exporting a model whose gloss slot still
-# points at the compiled name gets test_gloss_gloss_map.dds instead.
+# rebuilds the compiled GLOSS_MAP name as <everything before the source's last underscore>_gloss_map.
+# The source is the Gloss slot (t_smoothness), measured by compiling five distinguishable texture
+# names and seeing "aaa_gloss" come back as "aaa_gloss_map.dds". So the game's own test_gloss_map.dds
+# was authored as test_gloss.tga, and re-exporting a model whose Gloss slot still points at the
+# compiled name gets test_gloss_gloss_map.dds instead.
 GLOSS_MAP_SUFFIX = "_gloss_map"
 
 
@@ -270,13 +542,16 @@ VEGETATION_TEXTURE_SUBFOLDER = "textures"
 
 
 def _is_addon_vegetation_rules(text: str) -> bool:
-    return "AnimationType = tree" in text and "CreateRigidModelDescriptionFile = true" in text
+    return _section_has_keys(text, VEGETATION_SECTION, ("CreateRigidModelDescriptionFile",))
 
 
-def vegetation_rules_text(target_path: str, texture_folder: str, texture_subfolder: str) -> str:
-    return _VEGETATION_RULES_TEMPLATE.format(
-        target_path=target_path, texture_folder=texture_folder, texture_subfolder=texture_subfolder
-    )
+def vegetation_rules_text(
+    target_path: str,
+    texture_folder: str,
+    texture_subfolder: str,
+    settings: VegetationRules | None = None,
+) -> str:
+    return vegetation_rules_base(target_path, texture_folder, texture_subfolder, settings)
 
 
 def vegetation_paths_for(assembly_kit_root: str, cs2_path: Path) -> tuple[str, str, str]:
@@ -301,15 +576,21 @@ def vegetation_rules_written_by_addon(cs2_path: Path) -> bool:
     return _is_addon_vegetation_rules(text)
 
 
-def ensure_vegetation_rules(assembly_kit_root: str, cs2_path: Path) -> Path | None:
-    if not inside_raw_data(assembly_kit_root, cs2_path):
-        return None
-    rules_path = Path(cs2_path).parent / RULES_FILENAME
-    if rules_path.exists() or _rule_in_scope(assembly_kit_root, cs2_path, VEGETATION_SECTION):
-        return None
+def ensure_vegetation_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    settings: VegetationRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
     paths = vegetation_paths_for(assembly_kit_root, cs2_path)
-    rules_path.write_bytes(vegetation_rules_text(*paths).encode("ascii"))
-    return rules_path
+    return _ensure_rules(
+        assembly_kit_root,
+        cs2_path,
+        VEGETATION_SECTION,
+        vegetation_rules_text(*paths, settings),
+        _is_customised(settings),
+        overwrite,
+    )
 
 
 def _animation_override(stem: str, animation_type: str, fps: float) -> str:
@@ -339,25 +620,38 @@ def _update_animation_overrides(text: str, clips: list[tuple[str, str, float]]) 
     return text if changed else None
 
 
-def animation_rules_text(clips: list[tuple[str, str, float]]) -> str:
+def animation_rules_text(clips: list[tuple[str, str, float]], settings: AnimationRules | None = None) -> str:
     # clips is (file stem, skeleton name, fps).
-    return _ANIMATION_RULES_TEMPLATE + "".join(_animation_override(*clip) for clip in clips)
+    return animation_rules_base(settings) + "".join(_animation_override(*clip) for clip in clips)
 
 
 def _is_addon_animation_rules(text: str) -> bool:
-    return "IgnoreMetadata = true" in text and "ExportAsReferencePose" not in text
+    return (
+        _section_has_keys(text, ANIMATION_SECTION, ("IgnoreMetadata",))
+        and "ExportAsReferencePose" not in text
+    )
 
 
-def ensure_animation_rules(assembly_kit_root: str, cs2_path: Path, clips: list[tuple[str, str, float]]) -> Path | None:
-    raw_data = Path(assembly_kit_root) / "raw_data"
-    try:
-        Path(cs2_path).resolve().relative_to(raw_data.resolve())
-    except (ValueError, OSError):
+def ensure_animation_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    clips: list[tuple[str, str, float]],
+    settings: AnimationRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
+    if not inside_raw_data(assembly_kit_root, cs2_path):
         return None
 
+    base = animation_rules_base(settings)
     rules_path = Path(cs2_path).parent / RULES_FILENAME
     if rules_path.exists():
-        text = rules_path.read_bytes().decode("ascii", errors="replace")
+        text = _read_rules(rules_path)
+        if base_section_changes(text, ANIMATION_SECTION, base):
+            if not (_is_customised(settings) and overwrite):
+                return None
+            kept = base + _overrides_of(text)
+            rules_path.write_bytes((_update_animation_overrides(kept, clips) or kept).encode("ascii"))
+            return rules_path
         if not _is_addon_animation_rules(text):
             return None
         updated = _update_animation_overrides(text, clips)
@@ -366,8 +660,121 @@ def ensure_animation_rules(assembly_kit_root: str, cs2_path: Path, clips: list[t
         rules_path.write_bytes(updated.encode("ascii"))
         return rules_path
 
-    rules_path.write_bytes(animation_rules_text(clips).encode("ascii"))
+    rules_path.write_bytes(animation_rules_text(clips, settings).encode("ascii"))
     return rules_path
+
+
+# rules.bob is CRLF INI, and BOB reads the nearest one as a whole: replacing the section this
+# add-on owns must leave every other section in the file standing, including the [+Section]
+# <Files> overrides that bind each part or clip to its own skeleton.
+def _read_rules(rules_path: Path) -> str:
+    # Bytes, not read_text: universal newlines would turn the file's CRLF into LF, and everything
+    # downstream matches on CRLF.
+    return rules_path.read_bytes().decode("ascii", errors="replace")
+
+
+def _split_blocks(text: str) -> list[list[str]]:
+    blocks: list[list[str]] = []
+    for line in text.split("\r\n"):
+        if line.strip().startswith("["):
+            blocks.append([line])
+        elif blocks:
+            blocks[-1].append(line)
+    return blocks
+
+
+def _block_entries(block: list[str]) -> list[tuple[str, str]]:
+    entries = []
+    for line in block[1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        key, separator, value = stripped.partition("=")
+        if separator:
+            entries.append((key.strip(), value.strip()))
+    return entries
+
+
+def _find_block(text: str, section: str) -> list[str] | None:
+    for block in _split_blocks(text):
+        if block[0].strip().lower() == section:
+            return block
+    return None
+
+
+def _section_has_keys(text: str, section: str, keys: tuple[str, ...]) -> bool:
+    block = _find_block(text, section)
+    if block is None:
+        return False
+    present = {key.lower() for key, _ in _block_entries(block)}
+    return all(key.lower() in present for key in keys)
+
+
+def _without_section(text: str, section: str) -> str:
+    kept = []
+    dropped = False
+    for block in _split_blocks(text):
+        if not dropped and block[0].strip().lower() == section:
+            dropped = True
+            continue
+        kept.append(block)
+    return "".join("\r\n" + "\r\n".join(block).rstrip("\r\n") + "\r\n" for block in kept)
+
+
+def _overrides_of(text: str) -> str:
+    return "".join(
+        "\r\n" + "\r\n".join(block).rstrip("\r\n") + "\r\n"
+        for block in _split_blocks(text)
+        if block[0].strip().startswith("[+")
+    )
+
+
+def base_section_changes(text: str, section: str, base_text: str) -> list[str]:
+    header = base_text.split("\r\n", 1)[0].strip()
+    theirs = _find_block(text, section)
+    if theirs is None:
+        return [f"it declares no {header} section at all"]
+    ours = _block_entries(_split_blocks(base_text)[0])
+    existing = {key.lower(): value for key, value in _block_entries(theirs)}
+    changes = [
+        f"{key}: {existing[key.lower()]} -> {value}" if key.lower() in existing else f"{key}: -> {value}"
+        for key, value in ours
+        if existing.get(key.lower()) != value
+    ]
+    mine = {key.lower() for key, _ in ours}
+    changes.extend(
+        f"{key}: {value} -> dropped" for key, value in _block_entries(theirs) if key.lower() not in mine
+    )
+    return changes
+
+
+def rules_conflict(
+    assembly_kit_root: str, directory: Path, section: str, base_text: str, settings
+) -> list[str]:
+    # What the export dialog asks before it writes: nothing to confirm unless the artist changed a
+    # setting away from its default AND a rules.bob is already sitting where BOB would read it.
+    if not _is_customised(settings):
+        return []
+    directory = Path(directory)
+    if not inside_raw_data(assembly_kit_root, directory / "x.CS2"):
+        return []
+    rules_path = directory / RULES_FILENAME
+    if not rules_path.exists():
+        return []
+    return base_section_changes(_read_rules(rules_path), section, base_text)
+
+
+def unwritten_settings_warning(
+    assembly_kit_root: str, directory: Path, section: str, base_text: str, settings
+) -> str | None:
+    # Only reachable when the artist declined the overwrite, or when a background Blender had
+    # nobody to ask: either way what is on disk is not what the export dialog said it would build.
+    if not rules_conflict(assembly_kit_root, directory, section, base_text, settings):
+        return None
+    return (
+        f"A rules.bob already covers {directory} and it was left alone, so the export settings you "
+        "changed did not reach BOB - the values in that file are what it will build against."
+    )
 
 
 def _rule_in_scope(assembly_kit_root: str, cs2_path: Path, section: str) -> bool:
@@ -389,14 +796,28 @@ def _rule_in_scope(assembly_kit_root: str, cs2_path: Path, section: str) -> bool
     return False
 
 
-def _ensure_rules(assembly_kit_root: str, cs2_path: Path, section: str, contents: str) -> Path | None:
-    raw_data = Path(assembly_kit_root) / "raw_data"
-    try:
-        Path(cs2_path).resolve().relative_to(raw_data.resolve())
-    except (ValueError, OSError):
+def _ensure_rules(
+    assembly_kit_root: str,
+    cs2_path: Path,
+    section: str,
+    contents: str,
+    customised: bool = False,
+    overwrite: bool = False,
+) -> Path | None:
+    if not inside_raw_data(assembly_kit_root, cs2_path):
         return None
     rules_path = Path(cs2_path).parent / RULES_FILENAME
-    if rules_path.exists() or _rule_in_scope(assembly_kit_root, cs2_path, section):
+    if rules_path.exists():
+        # Left alone unless the artist asked for values this file does not carry and confirmed the
+        # overwrite - the [+Section] overrides in it are kept either way.
+        if not customised or not overwrite:
+            return None
+        text = _read_rules(rules_path)
+        if not base_section_changes(text, section, contents):
+            return None
+        rules_path.write_bytes((contents + _without_section(text, section)).encode("ascii"))
+        return rules_path
+    if _rule_in_scope(assembly_kit_root, cs2_path, section) and not customised:
         return None
     rules_path.write_bytes(contents.encode("ascii"))
     return rules_path

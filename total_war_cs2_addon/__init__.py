@@ -27,6 +27,7 @@ from ui import (
     animation_panels,
     operators,
     panels,
+    rules_options,
     unit_operators,
     unit_panels,
     vegetation_operators,
@@ -48,6 +49,7 @@ def _follow_preview_light(scene, depsgraph=None) -> None:
 def register() -> None:
     properties.set_addon_package_name(__name__)
     properties.register()
+    rules_options.register()
     operators.register()
     unit_operators.register()
     animation_operators.register()
@@ -71,4 +73,5 @@ def unregister() -> None:
     animation_operators.unregister()
     unit_operators.unregister()
     operators.unregister()
+    rules_options.unregister()
     properties.unregister()
