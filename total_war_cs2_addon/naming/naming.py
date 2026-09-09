@@ -555,3 +555,10 @@ def attachment_point_node_name(point_name: str) -> str:
 
 def attachment_point_name_of(node_name: str) -> str:
     return node_name[len(ATTACHMENT_POINT_PREFIX):] if node_name.startswith(ATTACHMENT_POINT_PREFIX) else node_name
+
+
+# BOB reads the LOD slot off a "_lodNN" postfix ("doesn't contain a correct '_lod' post-fix", "has a
+# lod number below 1") and appends " subobject N" itself once it splits the node by material, so a
+# real compile of a two-material tree came back named exactly as the game's own vegetation is.
+def vegetation_lod_node_name(model_name: str, lod_index: int) -> str:
+    return f"{model_name}_lod{lod_index:02d}"

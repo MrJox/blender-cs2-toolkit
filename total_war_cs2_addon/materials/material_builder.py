@@ -16,6 +16,7 @@ from materials.shader_types import (
     DEFAULT_ALPHA_MODE,
     ALPHA_TEST_ALPHA_MODE,
     BLEND_ALPHA_MODE,
+    VEGETATION_SHADER_TYPES,
 )
 from scene_model.models import MaterialDef
 
@@ -697,6 +698,22 @@ def read_uv2_layer_name(material: bpy.types.Material) -> str:
     return uv2_node.uv_map if uv2_node is not None and uv2_node.type == "UVMAP" else ""
 
 
+# The three COLOUR_ vec4 params live on the material as custom properties rather than in the
+# preview graph, because nothing in the graph reads them - see importer.vegetation_importer.
+TREE_COLOUR_PROPERTIES = ("tw_tree_colour_0", "tw_tree_colour_1", "tw_tree_colour_2")
+
+TREE_COLOUR_DEFAULTS = ((1.0, 1.0, 1.0, 1.0),) * 3
+
+
+def _tree_colours(material: bpy.types.Material) -> tuple[tuple[float, float, float, float], ...]:
+    if getattr(material, "tw_shader_type", "default") not in VEGETATION_SHADER_TYPES:
+        return ()
+    return tuple(
+        tuple(material[name])[:4] if name in material else default
+        for name, default in zip(TREE_COLOUR_PROPERTIES, TREE_COLOUR_DEFAULTS)
+    )
+
+
 def read_material_def(material: bpy.types.Material) -> MaterialDef:
     shader_type = getattr(material, "tw_shader_type", "default")
     uv2_layer_name = read_uv2_layer_name(material)
@@ -741,6 +758,7 @@ def read_material_def(material: bpy.types.Material) -> MaterialDef:
     return MaterialDef(
         name=material.name,
         shader_type=shader_type,
+        tree_colours=_tree_colours(material),
         diffuse_texture_path=diffuse_path,
         normal_texture_path=normal_path,
         mask_texture_path=mask_path,

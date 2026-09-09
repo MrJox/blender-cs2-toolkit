@@ -53,6 +53,9 @@ class MaterialDef:
     dirt_uv_offset_v: float = 0.5
     alpha_mode: int = -1
     uv2_layer_name: str = ""
+    # The three COLOUR_ vec4 params a vegetation mesh carries, in file order and in the file's own
+    # gamma space. Empty on every other shader type, which tints through tint_colours instead.
+    tree_colours: tuple[tuple[float, float, float, float], ...] = ()
 
 
 @dataclass

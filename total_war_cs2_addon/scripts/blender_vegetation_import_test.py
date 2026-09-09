@@ -94,43 +94,36 @@ def main() -> None:
     check("root collection carries the VEGETATION role", collection.tw_role == "VEGETATION")
     check("bone table name is recorded", collection.get("tw_bone_table_name") == "tree")
 
-    lods = children_by_role(collection, "VEGETATION_LOD")
-    check("oak_h has 3 mesh LODs", len(lods) == 3)
-    check("LOD camera distances are 100/200/400",
-          [round(lod["tw_lod_camera_distance"]) for lod in lods] == [100, 200, 400])
-    check("every mesh LOD holds a bark and a leaf mesh", all(len(lod.objects) == 2 for lod in lods))
+    display = children_by_role(collection, "VEGETATION_DISPLAY")
+    check("its meshes sit in one Display collection", len(display) == 1)
+    meshes = list(display[0].objects)
+    check("oak_h has 3 LOD meshes, one per level", len(meshes) == 3)
+    check("each carries its own LOD Level",
+          [obj.tw_vegetation_lod for obj in meshes] == ["LOD01", "LOD02", "LOD03"])
+    check("a LOD's subobjects arrive as material slots on one object, not as separate objects",
+          all(len(obj.data.materials) == 2 for obj in meshes))
+    check("and its faces are split between those slots",
+          all({polygon.material_index for polygon in obj.data.polygons} == {0, 1} for obj in meshes))
 
-    shader_types = {obj.data.materials[0].tw_shader_type for lod in lods for obj in lod.objects}
+    shader_types = {material.tw_shader_type for obj in meshes for material in obj.data.materials}
     check("both tree shaders are used", shader_types == {"tree", "tree_leaf"})
-    leaf = [obj for lod in lods for obj in lod.objects if obj.data.materials[0].tw_shader_type == "tree_leaf"][0]
-    check("leaf cards are alpha tested", leaf.data.materials[0].tw_alpha_mode == "ALPHA_TEST")
+    leaf = [m for obj in meshes for m in obj.data.materials if m.tw_shader_type == "tree_leaf"][0]
+    check("leaf cards are alpha tested", leaf.tw_alpha_mode == "ALPHA_TEST")
     check("the three colour params are kept on the material",
-          all(f"tw_tree_colour_{index}" in leaf.data.materials[0] for index in range(3)))
+          all(f"tw_tree_colour_{index}" in leaf for index in range(3)))
 
-    mesh_data = lods[0].objects[0].data
+    mesh_data = meshes[0].data
     check("the tree vertex fields survive import",
-          {"tw_tree_position0", "tw_tree_weight_0", "tw_tree_weight_3"} <= set(mesh_data.attributes.keys()))
+          {"tw_tree_position0", "tw_tree_wind_weight", "tw_tree_wind_bone", "tw_tree_anchor_bone"}
+          <= set(mesh_data.attributes.keys()))
+    check("the weight quad's last two components import as bone indices, not weights",
+          {entry.value for entry in mesh_data.attributes["tw_tree_wind_bone"].data} == {2})
     check("a colour attribute is created", "Colour" in mesh_data.color_attributes)
 
-    billboards = children_by_role(collection, "VEGETATION_BILLBOARD")
-    check("the generated billboard is imported", len(billboards) == 1)
-    billboard = billboards[0].objects[0]
-    check("the billboard is the 4-vertex quad BOB generates", len(billboard.data.vertices) == 4)
-    check("the billboard is named generated_billboard", billboard.name.startswith("generated_billboard"))
-    check("the generated billboard claims no authorable shader type",
-          billboard.data.materials[0].tw_shader_type == "default")
-
-    fire = children_by_role(collection, "VEGETATION_FIRE")
-    check("the tech sidecar was pulled in beside the model", len(fire) == 1)
-    hull = [obj for obj in fire[0].objects if not obj.get("tw_vfx_action")][0]
-    check("the hull is the lowest LOD's geometry", len(hull.data.vertices) == 16 and len(hull.data.polygons) == 6)
-    check("every hull face names the emitter that owns it",
-          all(face.value >= 0 for face in hull.data.attributes["tw_fire_emitter"].data))
-    emitters = [obj for obj in fire[0].objects if obj.get("tw_vfx_action")]
-    check("the fire emitters are one point cloud per action", len(emitters) == 1)
-    check("oak_h carries 2 emitters", len(emitters[0].data.vertices) == 2)
-    check("the emitter action name is preserved",
-          emitters[0]["tw_vfx_action"] == "action_vfx_fire_smoke_small_loop")
+    check("nothing BOB generates is imported alongside them",
+          [child.tw_role for child in collection.children] == ["VEGETATION_DISPLAY"])
+    check("and the artist is told the billboard was left out",
+          any("billboard" in message for message in warnings))
 
     problem = draw_vegetation_panel()
     check(f"the Vegetation panel draws over a real model{': ' + problem if problem else ''}", not problem)
@@ -139,19 +132,26 @@ def main() -> None:
     clear_scene()
     collection, _warnings, kind = import_file(str(SHRUB), bpy.context)
     check("shrub is VEGETATION", kind == "VEGETATION")
-    lods = children_by_role(collection, "VEGETATION_LOD")
-    check("the shrub has 2 mesh LODs", len(lods) == 2)
-    check("its LODs start at 200m, not 100m",
-          [round(lod["tw_lod_camera_distance"]) for lod in lods] == [200, 400])
+    meshes = list(children_by_role(collection, "VEGETATION_DISPLAY")[0].objects)
+    check("the shrub has 2 LOD meshes", len(meshes) == 2)
+    check("its LODs start at level 2, not level 1",
+          [obj.tw_vegetation_lod for obj in meshes] == ["LOD02", "LOD03"])
     check("every shrub mesh is a leaf",
-          all(obj.data.materials[0].tw_shader_type == "tree_leaf" for lod in lods for obj in lod.objects))
+          all(m.tw_shader_type == "tree_leaf" for obj in meshes for m in obj.data.materials))
+    check("a leaf-only LOD has a single material slot", all(len(obj.data.materials) == 1 for obj in meshes))
 
-    print("=== the tech sidecar imports on its own ===")
+    print("=== a lone tech sidecar is refused, with a reason ===")
     clear_scene()
-    collection, _warnings, kind = import_file(str(OAK_TECH), bpy.context)
-    check("a lone sidecar is VEGETATION", kind == "VEGETATION")
-    check("it builds a vegetation root", collection.tw_role == "VEGETATION")
-    check("holding just the fire hull", [child.tw_role for child in collection.children] == ["VEGETATION_FIRE"])
+    from importer.file_router import UnsupportedFileError
+
+    try:
+        import_file(str(OAK_TECH), bpy.context)
+        refusal = ""
+    except UnsupportedFileError as error:
+        refusal = str(error)
+    check("picking one says what it is instead of importing it", "generates" in refusal)
+    check("and points at the file that can be authored", ".rigid_model_v2" in refusal)
+    check("nothing was created for it", not bpy.data.collections)
 
     print("=== the two file types that share an extension still route correctly ===")
     clear_scene()

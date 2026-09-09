@@ -69,6 +69,10 @@ def find_skeleton_collection(context: bpy.types.Context) -> bpy.types.Collection
     return _find_role_from_selection(context, "SKELETON")
 
 
+def find_vegetation_collection(context: bpy.types.Context) -> bpy.types.Collection | None:
+    return _find_role_from_selection(context, "VEGETATION")
+
+
 def find_piece_collection(
     context: bpy.types.Context, start: bpy.types.Collection | None = None
 ) -> bpy.types.Collection | None:
@@ -82,12 +86,13 @@ def get_object_collection_role(obj: bpy.types.Object) -> str:
     return "NONE"
 
 
-ASSET_ROLES = ("BUILDING", "UNIT", "SKELETON")
+ASSET_ROLES = ("BUILDING", "UNIT", "SKELETON", "VEGETATION")
 
 _ASSET_ROLE_NAMES = {
     "BUILDING": ("building", "buildings"),
     "UNIT": ("unit asset", "unit assets"),
     "SKELETON": ("skeleton", "skeletons"),
+    "VEGETATION": ("vegetation model", "vegetation models"),
 }
 
 

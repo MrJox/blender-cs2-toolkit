@@ -1,4 +1,10 @@
-from materials.shader_types import DECAL_DIRTMAP_SHADER_TYPES, DECAL_SHADER_TYPES, ALPHA_MODE_VALUES
+from materials.shader_types import (
+    ALPHA_MODE_VALUES,
+    DECAL_DIRTMAP_SHADER_TYPES,
+    DECAL_SHADER_TYPES,
+    VEGETATION_RIGID_MATERIALS,
+    rigid_material_name,
+)
 from binary.cs2_structures import (
     NodeAttributes,
     NodeAttributeString,
@@ -135,7 +141,9 @@ def build_directx_material_node(
     dirt_uv_offset_u: float = 0.5,
     dirt_uv_offset_v: float = 0.5,
     alpha_mode: int = ALPHA_MODE_VALUES["NONE"],
+    vec4_colours: tuple[tuple[float, float, float, float], ...] = (),
 ) -> MaterialNode:
+    rigid_material = rigid_material_name(rigid_material)
     overrides = {
         "t_albedo": diffuse_texture_path,
         "t_normal": normal_texture_path,
@@ -154,6 +162,13 @@ def build_directx_material_node(
         "t_decal_dirtmap": decal_dirtmap_texture_paths[0],
         "t_decal_dirtmask": decal_dirtmap_texture_paths[1],
     }
+
+    # A tree material has to fill t_reflectivity as well as t_smoothness - real compiles refused the
+    # mesh for each of them in turn ("is missing texture 't_reflectivity'" / "'t_smoothness'") - but
+    # only four texture slots reach the compiled mesh, the same four the game's own vegetation
+    # carries. A tree authored with one gloss map therefore feeds both samplers from it.
+    if rigid_material in VEGETATION_RIGID_MATERIALS and not level_texture_path:
+        overrides["t_reflectivity"] = gloss_texture_path
 
     textures = []
     for slot_name, _ in _PLACEHOLDER_TEXTURE_SLOTS:
@@ -197,6 +212,11 @@ def build_directx_material_node(
         f"vec4_colour_{index}": tuple(max(c, 0.0) ** (1.0 / 2.2) for c in colour) + (1.0,)
         for index, colour in enumerate(tint_colours)
     }
+    # A vegetation mesh's three COLOUR_ params are shader constants the compiler copies straight
+    # through, not tint swatches the shader runs through _linear(), so they bypass the gamma step.
+    vec4_overrides.update(
+        {f"vec4_colour_{index}": tuple(colour) for index, colour in enumerate(vec4_colours)}
+    )
     vec4_attributes = [
         NodeAttributeVec4(name, vec4_overrides.get(name, value)) for name, value in _VEC4_ATTRIBUTE_TEMPLATE
     ]

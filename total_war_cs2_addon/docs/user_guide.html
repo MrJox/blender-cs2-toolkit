@@ -1114,7 +1114,9 @@
           </div>
           <div>
             <dt><code>.cs2.parsed</code></dt>
-            <dd>A compiled building's collision, platforms and markers — no visible meshes in it.</dd>
+            <dd>A compiled building's collision, platforms and markers — no visible meshes in it. A tree's
+              companion file shares the extension; it holds only what the build tool generates, so opening
+              one tells you to open the model beside it instead.</dd>
           </div>
           <div>
             <dt><code>.rigid_model_v2</code></dt>
@@ -1584,33 +1586,71 @@
         <div class="sec-head">
           <p class="eyebrow">Workflow</p>
           <h2>Vegetation</h2>
-          <p>Trees, shrubs and stones — <b>reading only</b>, for now.</p>
+          <p>Trees, shrubs and stones.</p>
         </div>
 
-        <p>You can open any of the game's vegetation and study how it is put together. You cannot yet export
-          your own; that part is not built.</p>
+        <p>A tree is one exported file, and one collection holds the whole thing. Inside it, a
+          <b>Display</b> collection holds one mesh per level of detail — the same shape a building's Display
+          collection has.</p>
 
-        <p>Import a tree's <code>.rigid_model_v2</code> and its companion tech file comes along with it.</p>
+        <div class="tree"><b>oak_h</b>              <i>← Vegetation Model. One exported file.</i>
+└── <b>Display</b>         <i>← its meshes live here</i>
+    ├── <b>oak_h_lod01</b>   <i>← LOD 1. Bark and leaf materials on one mesh.</i>
+    ├── <b>oak_h_lod02</b>   <i>← LOD 2</i>
+    └── <b>oak_h_lod03</b>   <i>← LOD 3</i></div>
 
-        <div class="kv">
-          <div>
-            <dt>Vegetation LOD</dt>
-            <dd>One level of detail, holding bark meshes, leaf meshes, or both. Which LOD it is decides how
-              far away it is still drawn: 100 m, 200 m, then 400 m.</dd>
+        <div class="cards">
+          <div class="card">
+            <h3>Vegetation Model <span class="tag req">required</span></h3>
+            <p>One exported file, named for what it is. Press <b>New Vegetation Model</b> and you get the
+              collection and its Display collection together.</p>
           </div>
-          <div>
-            <dt>Generated Billboard</dt>
-            <dd>The flat far-distance stand-in the build tool makes automatically. Shown for reference —
-              editing it changes nothing.</dd>
+
+          <div class="card">
+            <h3>Display <span class="tag req">required</span></h3>
+            <p>Put your LOD meshes in here. One mesh per level — not one per material.</p>
           </div>
-          <div>
-            <dt>Generated Fire Hull</dt>
-            <dd>The burn shape and its flame emitters, also generated. Also read-only.</dd>
+
+          <div class="card">
+            <h3>LOD Level <span class="tag req">required</span></h3>
+            <p>Select a mesh and set it in the Vegetation panel. It decides how far away that mesh is still
+              drawn: <b>LOD 1</b> out to 100 m, <b>LOD 2</b> to 200 m, <b>LOD 3</b> to 400 m.</p>
+            <p>Skipping a level is allowed and means what it says. A shrub built as LOD 2 and LOD 3 is
+              simply never drawn at the closest distance — which is what the game's own shrubs do.</p>
           </div>
         </div>
 
-        <p>The two vegetation shaders are <b>Tree</b> for bark and solid props, and <b>Tree Leaf</b> for
-          leaf cards and whole shrubs. The game sways both in the wind.</p>
+        <h3>Bark and leaves on one mesh</h3>
+
+        <p>Give the mesh <b>two material slots</b>: <b>Tree</b> for bark, trunk and solid props like stones,
+          and <b>Tree Leaf</b> for leaf cards and whole shrubs. Assign each to its own faces the ordinary
+          Blender way. The build tool splits the mesh along that division for you.</p>
+
+        <p>A shrub that is all foliage needs only Tree Leaf. A stone or a dead trunk needs only Tree. The
+          game sways both shaders in the wind.</p>
+
+        <div class="note">
+          <p>Vegetation wants <b>four textures on every material</b>: Diffuse, Normal, Specular and Gloss.
+            The build tool refuses a mesh that is missing any of them, and Validate says so first. The
+            game's own trees point Specular and Gloss at shared flat swatches
+            (<code>test_gray</code>, <code>test_gloss</code>) — copying that is fine.</p>
+        </div>
+
+        <div class="note warn">
+          <p><b>Name your gloss texture <code>&lt;something&gt;_gloss</code>.</b> The build tool renames it
+            on the way in, and a file already called <code>..._gloss_map</code> comes out as
+            <code>..._gloss_gloss_map</code>, which the game cannot find. Export warns you if it spots one.</p>
+        </div>
+
+        <h3>Opening a tree from the game</h3>
+
+        <p>Import a tree's <code>.rigid_model_v2</code> and you get exactly the collections above — its LOD
+          meshes, their materials and their textures. Re-exporting one rebuilds the same model.</p>
+
+        <p>Some of what is in a compiled tree never appears in the scene, because the build tool makes it
+          fresh from your meshes every time: the flat far-distance stand-in, and the shape the fire spreads
+          over when the tree burns. There is nothing in either to author, so bringing them in would only
+          give you objects that ignore your edits.</p>
       </section>
 
       <hr class="rule">

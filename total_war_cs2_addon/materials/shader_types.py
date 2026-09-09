@@ -95,10 +95,22 @@ SHADER_TYPE_WORKFLOWS = {
     "tree_leaf": frozenset({"VEGETATION"}),
 }
 
-# The two rigid_material names BOB maps onto RS_TREE_V5 and RS_LEAF_V5, from its own
-# material-name table (PLAN_vegetation.md 5). They happen to match the add-on's identifiers, and
-# this mapping exists so a future exporter does not have to rediscover that.
 VEGETATION_SHADER_TYPES = frozenset({"tree", "tree_leaf"})
+
+# What a shader type is called in the .CS2's own rigid_material attribute, where it differs from the
+# add-on's identifier. raw_data/Lighting/Rigid_Materials.xml is the table BOB resolves that name
+# through, and it calls the RS_TREE_V5 entry `tree_branch` - `tree` is the shader_type that entry
+# maps *to*, and a real compile that wrote it rejected the file outright ("Rigid Material Name tree
+# not found in .../Rigid_Materials.xml"). tree_leaf is the same word in both tables.
+RIGID_MATERIAL_NAMES = {"tree": "tree_branch"}
+
+VEGETATION_RIGID_MATERIALS = frozenset(
+    RIGID_MATERIAL_NAMES.get(shader_type, shader_type) for shader_type in VEGETATION_SHADER_TYPES
+)
+
+
+def rigid_material_name(shader_type: str) -> str:
+    return RIGID_MATERIAL_NAMES.get(shader_type, shader_type)
 
 # ps30_full_skin swaps the whole lighting model, not just a texture blend: mask1/2/3 stop being
 # faction tint masks and become rim / subsurface / backscatter strengths, and the specular colour

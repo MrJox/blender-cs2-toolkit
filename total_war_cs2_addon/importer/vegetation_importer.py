@@ -1,14 +1,13 @@
 import math
-import struct
 from pathlib import Path
 
 import bpy
 
 from binary import rigid_model_v2_structures as rs
 from binary.rigid_model_v2_reader import read_rigid_model_v2
-from binary.vegetation_tech_reader import VegetationTechReader
 from materials.material_builder import TW_PLACEHOLDER_MARKER, create_total_war_material
-from props.properties import LOD_IDENTIFIER_BY_INDEX
+from props.properties import TW_ROLE_LABELS, VEGETATION_LOD_IDENTIFIER_BY_INDEX
+from scene_model.vegetation_models import LOD_CAMERA_DISTANCES
 from .rigid_model_v2_importer import TEXTURE_NODE_BY_ID, _load_texture
 
 SHADER_TYPE_BY_FLAGS = {
@@ -17,13 +16,11 @@ SHADER_TYPE_BY_FLAGS = {
 }
 
 # The three VEC4_PARAM_COLOUR_ slots every vegetation mesh carries, kept on the Blender material so
-# a future exporter can write back what the file said. They are shader constants, not textures, so
+# the exporter can write back what the file said. They are shader constants, not textures, so
 # nothing in the preview graph reads them.
 COLOUR_PARAM_PROPERTIES = {1: "tw_tree_colour_0", 2: "tw_tree_colour_1", 3: "tw_tree_colour_2"}
 
-FIRE_HULL_COLLECTION = "Fire Hull"
-BILLBOARD_COLLECTION = "Billboard"
-TECH_SUFFIX = "_tech.cs2.parsed"
+SUBOBJECT_SUFFIX = " subobject "
 
 
 def _to_blender_space(vector) -> tuple[float, float, float]:
@@ -85,38 +82,56 @@ def _material_for(mesh: rs.Mesh, model_path: Path) -> bpy.types.Material:
 
 
 def _store_tree_vertex_data(mesh_data: bpy.types.Mesh, vertices) -> None:
-    # position0 and the weight quad have no established meaning (PLAN_vegetation.md 1.4), so they
-    # are carried through under the file's own field names rather than thrown away or renamed to a
-    # guess. The first two weights always sum to 1, so weight 1 is not stored.
+    # The weight quad is (weight, weight, bone index, bone index), not four weights - measured by
+    # compiling a tree through BOB with known influences and reading the result back. Only the first
+    # weight is stored: the second is always 1 minus it. position0 is the vertex in the first bone's
+    # own space; BOB recomputes it on export, so it is carried for fidelity rather than read back.
     position0 = mesh_data.attributes.new("tw_tree_position0", "FLOAT_VECTOR", "POINT")
-    weight_0 = mesh_data.attributes.new("tw_tree_weight_0", "FLOAT", "POINT")
-    weight_3 = mesh_data.attributes.new("tw_tree_weight_3", "FLOAT", "POINT")
+    wind_weight = mesh_data.attributes.new("tw_tree_wind_weight", "FLOAT", "POINT")
+    wind_bone = mesh_data.attributes.new("tw_tree_wind_bone", "INT", "POINT")
+    anchor_bone = mesh_data.attributes.new("tw_tree_anchor_bone", "INT", "POINT")
     colour = mesh_data.color_attributes.new("Colour", "FLOAT_COLOR", "POINT")
     for index, vertex in enumerate(vertices):
         position0.data[index].vector = _to_blender_space(vertex.tree_position0 or (0.0, 0.0, 0.0))
-        weights = vertex.tree_weights or (0.0, 0.0, 0.0, 0.0)
-        weight_0.data[index].value = weights[0]
-        weight_3.data[index].value = weights[3]
+        weights = vertex.tree_weights or (0.0, 1.0, 2.0, 0.0)
+        wind_weight.data[index].value = weights[0]
+        wind_bone.data[index].value = int(weights[2])
+        anchor_bone.data[index].value = int(weights[3])
         colour.data[index].color = [channel / 255.0 for channel in (vertex.colour or (255, 255, 255, 255))]
 
 
-def _build_mesh(name: str, mesh: rs.Mesh, material: bpy.types.Material) -> bpy.types.Mesh:
-    positions = [_to_blender_space(vertex.position) for vertex in mesh.vertices]
-    # The axis swap is a reflection, so the file's corner order would leave every face wound against
-    # its own normal - the same correction the building and unit importers make.
-    triangles = [
-        (mesh.indices[index + 2], mesh.indices[index + 1], mesh.indices[index])
-        for index in range(0, len(mesh.indices) - 2, 3)
-    ]
+def _build_mesh(name: str, meshes: list[rs.Mesh], materials: list[bpy.types.Material]) -> bpy.types.Mesh:
+    # One Blender object per LOD carrying one material slot per subobject, rather than one object per
+    # subobject: BOB splits a node by material itself, and that split is what the compiled
+    # "<node> subobject N" names are. Keeping them apart in the scene would ask the artist to
+    # maintain by hand a division the tools already make.
+    positions: list[tuple[float, float, float]] = []
+    triangles: list[tuple[int, int, int]] = []
+    slot_of_triangle: list[int] = []
+    vertices = []
+    for slot, mesh in enumerate(meshes):
+        offset = len(positions)
+        positions.extend(_to_blender_space(vertex.position) for vertex in mesh.vertices)
+        vertices.extend(mesh.vertices)
+        # The axis swap is a reflection, so the file's corner order would leave every face wound
+        # against its own normal - the same correction the building and unit importers make.
+        for index in range(0, len(mesh.indices) - 2, 3):
+            triangles.append(tuple(mesh.indices[index + step] + offset for step in (2, 1, 0)))
+            slot_of_triangle.append(slot)
 
     mesh_data = bpy.data.meshes.new(name)
     mesh_data.from_pydata(positions, [], triangles)
     uv_layer = mesh_data.uv_layers.new(name="UVMap")
     for loop in mesh_data.loops:
-        u, v = mesh.vertices[loop.vertex_index].uv
+        u, v = vertices[loop.vertex_index].uv
         uv_layer.data[loop.index].uv = (u, 1.0 - v)
 
-    normals = [_to_blender_space(vertex.normal) for vertex in mesh.vertices]
+    for material in materials:
+        mesh_data.materials.append(material)
+    for polygon, slot in zip(mesh_data.polygons, slot_of_triangle):
+        polygon.material_index = slot
+
+    normals = [_to_blender_space(vertex.normal) for vertex in vertices]
     if any(math.sqrt(sum(axis * axis for axis in normal)) > 0.01 for normal in normals):
         mesh_data.polygons.foreach_set("use_smooth", [True] * len(mesh_data.polygons))
         try:
@@ -124,152 +139,31 @@ def _build_mesh(name: str, mesh: rs.Mesh, material: bpy.types.Material) -> bpy.t
         except Exception:
             pass
 
-    if mesh.vertex_format == rs.VERTEX_TREE:
-        _store_tree_vertex_data(mesh_data, mesh.vertices)
-    mesh_data.materials.append(material)
+    if all(mesh.vertex_format == rs.VERTEX_TREE for mesh in meshes):
+        _store_tree_vertex_data(mesh_data, vertices)
     mesh_data.update()
     return mesh_data
 
 
-def _billboard_mesh(name: str, mesh: rs.Mesh) -> bpy.types.Mesh:
-    positions = [_to_blender_space(vertex.position) for vertex in mesh.vertices]
-    triangles = [
-        (mesh.indices[index + 2], mesh.indices[index + 1], mesh.indices[index])
-        for index in range(0, len(mesh.indices) - 2, 3)
-    ]
-    mesh_data = bpy.data.meshes.new(name)
-    mesh_data.from_pydata(positions, [], triangles)
-    uv_layer = mesh_data.uv_layers.new(name="UVMap")
-    for loop in mesh_data.loops:
-        u, v = mesh.vertices[loop.vertex_index].uv
-        uv_layer.data[loop.index].uv = (u, 1.0 - v)
-    mesh_data.update()
-    return mesh_data
+def _lod_rung(camera_distance: float, fallback: int) -> int:
+    # The rung, not the position in the file: a shrub whose meshes are named _lod02/_lod03 has two
+    # LODs but they belong at 200m and 400m, and re-exporting it as LOD 1 and LOD 2 would move the
+    # whole model a rung closer to the camera.
+    for index, distance in enumerate(LOD_CAMERA_DISTANCES, start=1):
+        if abs(distance - camera_distance) < 0.5:
+            return index
+    return fallback
 
 
-def _billboard_material(mesh: rs.Mesh, model_path: Path) -> bpy.types.Material | None:
-    # Deliberately a plain Blender material, not a Total War one: RS_CAMERA_ALIGNED_BILLBOARD_V6 is
-    # not a rigid_material an artist can assign, so giving it a tw_shader_type would claim the
-    # add-on can author a billboard when BOB is the only thing that makes one.
-    header = mesh.material
-    if header is None or not header.textures:
-        return None
-    name = f"{model_path.stem}_billboard"
-    material = bpy.data.materials.get(name)
-    if material is not None:
-        return material
-
-    material = bpy.data.materials.new(name)
-    material.use_nodes = True
-    material.use_backface_culling = False
-    material.surface_render_method = "DITHERED"
-    principled = material.node_tree.nodes["Principled BSDF"]
-    image = _load_texture(_resolve_texture(header.textures[0].path, model_path), model_path)
-    if image is not None:
-        if TW_PLACEHOLDER_MARKER in image:
-            del image[TW_PLACEHOLDER_MARKER]
-        texture = material.node_tree.nodes.new("ShaderNodeTexImage")
-        texture.image = image
-        texture.location = (-400, 300)
-        material.node_tree.links.new(texture.outputs["Color"], principled.inputs["Base Color"])
-        material.node_tree.links.new(texture.outputs["Alpha"], principled.inputs["Alpha"])
-    return material
-
-
-def _lod_collection(parent: bpy.types.Collection, lod_index: int, camera_distance: float) -> bpy.types.Collection:
-    collection = bpy.data.collections.new(f"LOD {lod_index}")
-    collection.tw_role = "VEGETATION_LOD"
-    collection["tw_lod_camera_distance"] = camera_distance
-    parent.children.link(collection)
-    return collection
-
-
-def _hull_object(tech, name: str) -> bpy.types.Object:
-    hull = tech.hull
-    positions = [_to_blender_space(vertex) for vertex in hull.vertices]
-    triangles = []
-    subobjects = []
-    for index in range(hull.face_count):
-        subobject, = struct.unpack_from("<I", hull.faces_bytes, index * 81)
-        v0, v1, v2 = struct.unpack_from("<III", hull.faces_bytes, index * 81 + 5)
-        if max(v0, v1, v2) >= len(positions):
-            continue
-        triangles.append((v2, v1, v0))
-        subobjects.append(subobject)
-
-    mesh_data = bpy.data.meshes.new(name)
-    mesh_data.from_pydata(positions, [], triangles)
-
-    owner_by_face = {}
-    for node_index, node in enumerate(tech.vfx_nodes):
-        for face_index in node.face_indices:
-            owner_by_face[face_index] = node_index
-    emitter = mesh_data.attributes.new("tw_fire_emitter", "INT", "FACE")
-    source = mesh_data.attributes.new("tw_source_subobject", "INT", "FACE")
-    for face_index in range(len(triangles)):
-        emitter.data[face_index].value = owner_by_face.get(face_index, -1)
-        source.data[face_index].value = subobjects[face_index]
-
-    mesh_data.update()
-    obj = bpy.data.objects.new(name, mesh_data)
-    obj.display_type = "WIRE"
-    return obj
-
-
-def _emitter_objects(tech) -> list[bpy.types.Object]:
-    # Every emitter transform in the whole game corpus is a pure translation and they all share one
-    # action name, so one point-cloud object per distinct action carries the file exactly and keeps
-    # a large tree from arriving as hundreds of empties.
-    by_action: dict[str, list[tuple[float, float, float]]] = {}
-    for node in tech.vfx_nodes:
-        by_action.setdefault(node.name, []).append(
-            _to_blender_space((node.transform[12], node.transform[13], node.transform[14]))
-        )
-
-    objects = []
-    for action, points in by_action.items():
-        mesh_data = bpy.data.meshes.new(action)
-        mesh_data.from_pydata(points, [], [])
-        mesh_data.update()
-        obj = bpy.data.objects.new(action, mesh_data)
-        obj["tw_vfx_action"] = action
-        objects.append(obj)
-    return objects
-
-
-def _build_fire_hull(tech, parent: bpy.types.Collection, stem: str) -> bpy.types.Collection:
-    collection = bpy.data.collections.new(FIRE_HULL_COLLECTION)
-    collection.tw_role = "VEGETATION_FIRE"
-    parent.children.link(collection)
-    collection.objects.link(_hull_object(tech, tech.hull.name or f"{stem}_hull"))
-    for obj in _emitter_objects(tech):
-        collection.objects.link(obj)
-    return collection
-
-
-def find_tech_sidecar(model_path: Path) -> Path | None:
-    candidate = model_path.with_name(f"{model_path.stem}{TECH_SUFFIX}")
-    return candidate if candidate.is_file() else None
-
-
-def import_vegetation_tech(
-    filepath: str, context: bpy.types.Context, parent_collection: bpy.types.Collection | None = None
-) -> tuple[bpy.types.Collection, list[str]]:
-    path = Path(bpy.path.abspath(filepath))
-    tech = VegetationTechReader.read_file(str(path))
-    stem = path.name[: -len(TECH_SUFFIX)] if path.name.endswith(TECH_SUFFIX) else path.stem
-
-    if parent_collection is None:
-        parent_collection = bpy.data.collections.new(stem)
-        parent_collection.tw_role = "VEGETATION"
-        context.scene.collection.children.link(parent_collection)
-
-    _build_fire_hull(tech, parent_collection, stem)
-    emitters = len(tech.vfx_nodes)
-    return parent_collection, [
-        f"'{path.name}' holds the burn hull BOB derives from the lowest LOD ({tech.hull.face_count} faces) and "
-        f"{emitters} fire emitter(s) it distributed over it. Both are generated - editing them changes nothing."
-    ]
+# BOB appends " subobject N" per material split, so the part before it is the node the artist named.
+def _node_name(meshes: list[rs.Mesh], fallback: str) -> str:
+    for mesh in meshes:
+        name = mesh.material.name if mesh.material is not None else ""
+        if SUBOBJECT_SUFFIX in name:
+            return name.split(SUBOBJECT_SUFFIX)[0]
+        if name:
+            return name
+    return fallback
 
 
 def import_vegetation(filepath: str, context: bpy.types.Context) -> tuple[bpy.types.Collection, list[str]]:
@@ -282,54 +176,47 @@ def import_vegetation(filepath: str, context: bpy.types.Context) -> tuple[bpy.ty
     root["tw_bone_table_name"] = model.bone_table_name
     context.scene.collection.children.link(root)
 
+    display = bpy.data.collections.new(TW_ROLE_LABELS["VEGETATION_DISPLAY"])
+    display.tw_role = "VEGETATION_DISPLAY"
+    root.children.link(display)
+
     lod_number = 0
+    billboards = 0
     for lod in model.lods:
-        billboards = [mesh for mesh in lod.meshes if mesh.shader_flags == rs.SHADER_CAMERA_ALIGNED_BILLBOARD_V6]
+        # The billboard LOD is BOB's, rebuilt from the model on every compile, and so is the burn
+        # hull in the sidecar beside it. Neither is authored and neither is exported, so importing
+        # them would only put objects in the scene that an artist can edit to no effect.
+        billboards += sum(
+            1 for mesh in lod.meshes if mesh.shader_flags == rs.SHADER_CAMERA_ALIGNED_BILLBOARD_V6
+        )
         renderables = [mesh for mesh in lod.meshes if mesh.shader_flags in SHADER_TYPE_BY_FLAGS]
-        skipped = len(lod.meshes) - len(billboards) - len(renderables)
-        if skipped:
+        skipped = len(lod.meshes) - len(renderables) - sum(
+            1 for mesh in lod.meshes if mesh.shader_flags == rs.SHADER_CAMERA_ALIGNED_BILLBOARD_V6
+        )
+        if skipped > 0:
             warnings.append(
                 f"Skipped {skipped} mesh(es) at camera distance {lod.camera_distance:g} using a shader this "
                 "add-on does not read as vegetation."
             )
 
-        if billboards:
-            collection = bpy.data.collections.new(BILLBOARD_COLLECTION)
-            collection.tw_role = "VEGETATION_BILLBOARD"
-            collection["tw_lod_camera_distance"] = lod.camera_distance
-            root.children.link(collection)
-            for mesh in billboards:
-                name = mesh.material.name if mesh.material is not None and mesh.material.name else "billboard"
-                obj = bpy.data.objects.new(name, _billboard_mesh(name, mesh))
-                material = _billboard_material(mesh, path)
-                if material is not None:
-                    obj.data.materials.append(material)
-                collection.objects.link(obj)
-
         if not renderables:
             continue
         lod_number += 1
-        collection = _lod_collection(root, lod_number, lod.camera_distance)
-        for mesh in renderables:
-            header_name = mesh.material.name if mesh.material is not None else ""
-            name = header_name or f"{path.stem}_lod{lod_number}"
-            obj = bpy.data.objects.new(name, _build_mesh(name, mesh, _material_for(mesh, path)))
-            obj.tw_lod_index = LOD_IDENTIFIER_BY_INDEX.get(lod_number, "LOD05")
-            collection.objects.link(obj)
+        rung = _lod_rung(lod.camera_distance, lod_number)
+        name = _node_name(renderables, f"{path.stem}_lod{rung:02d}")
+        materials = [_material_for(mesh, path) for mesh in renderables]
+        obj = bpy.data.objects.new(name, _build_mesh(name, renderables, materials))
+        obj.tw_vegetation_lod = VEGETATION_LOD_IDENTIFIER_BY_INDEX.get(rung, "LOD03")
+        display.objects.link(obj)
 
     if lod_number == 0:
         warnings.append(f"'{path.name}' held no vegetation mesh this add-on could decode.")
-
-    sidecar = find_tech_sidecar(path)
-    if sidecar is not None:
-        _, tech_warnings = import_vegetation_tech(str(sidecar), context, root)
-        warnings.extend(tech_warnings)
-    else:
+    if billboards:
         warnings.append(
-            f"No '{path.stem}{TECH_SUFFIX}' beside the model, so its burn hull and fire emitters were not "
-            "imported."
+            f"'{path.name}' carries {billboards} generated billboard mesh(es), which were not imported - "
+            "BOB builds the billboard from the model itself, so there is nothing in it to author."
         )
     return root, warnings
 
 
-__all__ = ["import_vegetation", "import_vegetation_tech", "is_vegetation_model", "find_tech_sidecar"]
+__all__ = ["import_vegetation", "is_vegetation_model"]

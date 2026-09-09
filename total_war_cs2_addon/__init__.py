@@ -29,6 +29,7 @@ from ui import (
     panels,
     unit_operators,
     unit_panels,
+    vegetation_operators,
     vegetation_panels,
 )
 
@@ -50,6 +51,7 @@ def register() -> None:
     operators.register()
     unit_operators.register()
     animation_operators.register()
+    vegetation_operators.register()
     panels.register()
     unit_panels.register()
     animation_panels.register()
@@ -62,6 +64,7 @@ def unregister() -> None:
     if _follow_preview_light in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_follow_preview_light)
     vegetation_panels.unregister()
+    vegetation_operators.unregister()
     animation_panels.unregister()
     unit_panels.unregister()
     panels.unregister()

@@ -376,6 +376,23 @@ class TW_PT_materials(WorkflowGatedPanel, bpy.types.Panel):
         box.operator("tw_buildings.sync_preview_light", icon="LIGHT_SUN")
 
 
+# Every workflow validates and exports from the same two panels, in the same place, so an artist who
+# has learnt one workflow already knows where the buttons are in the next.
+_VALIDATE_OPERATORS = {
+    "SKELETON": "tw_buildings.validate_skeleton",
+    "UNIT": "tw_buildings.validate_unit",
+    "SKELETAL_ANIMATION": "tw_buildings.validate_animation",
+    "VEGETATION": "tw_buildings.validate_vegetation",
+}
+
+_EXPORT_OPERATORS = {
+    "SKELETON": "tw_buildings.export_skeleton",
+    "UNIT": "tw_buildings.export_units",
+    "SKELETAL_ANIMATION": "tw_buildings.export_animation",
+    "VEGETATION": "tw_buildings.export_vegetation",
+}
+
+
 class TW_PT_validation(WorkflowGatedPanel, bpy.types.Panel):
     bl_label = "Validation"
     bl_idname = "TW_PT_validation"
@@ -383,19 +400,10 @@ class TW_PT_validation(WorkflowGatedPanel, bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Total War"
     bl_order = 3
-    workflows = frozenset({"BUILDING", "UNIT", "SKELETON", "SKELETAL_ANIMATION"})
+    workflows = frozenset({"BUILDING", "UNIT", "SKELETON", "SKELETAL_ANIMATION", "VEGETATION"})
 
     def draw(self, context: bpy.types.Context) -> None:
-        if context.scene.tw_workflow == "SKELETON":
-            self.layout.operator("tw_buildings.validate_skeleton", icon="CHECKMARK")
-            return
-        if context.scene.tw_workflow == "UNIT":
-            self.layout.operator("tw_buildings.validate_unit", icon="CHECKMARK")
-            return
-        if context.scene.tw_workflow == "SKELETAL_ANIMATION":
-            self.layout.operator("tw_buildings.validate_animation", icon="CHECKMARK")
-            return
-        self.layout.operator("tw_buildings.validate", icon="CHECKMARK")
+        self.layout.operator(_VALIDATE_OPERATORS.get(context.scene.tw_workflow, "tw_buildings.validate"), icon="CHECKMARK")
 
 
 class TW_PT_export(WorkflowGatedPanel, bpy.types.Panel):
@@ -405,19 +413,10 @@ class TW_PT_export(WorkflowGatedPanel, bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Total War"
     bl_order = 4
-    workflows = frozenset({"BUILDING", "UNIT", "SKELETON", "SKELETAL_ANIMATION"})
+    workflows = frozenset({"BUILDING", "UNIT", "SKELETON", "SKELETAL_ANIMATION", "VEGETATION"})
 
     def draw(self, context: bpy.types.Context) -> None:
-        if context.scene.tw_workflow == "SKELETON":
-            self.layout.operator("tw_buildings.export_skeleton", icon="EXPORT")
-            return
-        if context.scene.tw_workflow == "UNIT":
-            self.layout.operator("tw_buildings.export_units", icon="EXPORT")
-            return
-        if context.scene.tw_workflow == "SKELETAL_ANIMATION":
-            self.layout.operator("tw_buildings.export_animation", icon="EXPORT")
-            return
-        self.layout.operator("tw_buildings.export_building", icon="EXPORT")
+        self.layout.operator(_EXPORT_OPERATORS.get(context.scene.tw_workflow, "tw_buildings.export_building"), icon="EXPORT")
 
 
 CLASSES = (

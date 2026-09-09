@@ -96,6 +96,7 @@ ANIMATION_SECTION = SKELETON_SECTION
 
 UNIT_SECTION = "[rigidmodelv2]"
 UNIT_TARGET_PATH = "VariantMeshes\\_VariantModels\\"
+BACKSLASH = "\\"
 
 
 def building_name_for(cs2_path: Path) -> str:
@@ -212,6 +213,102 @@ def ensure_unit_rules(assembly_kit_root: str, cs2_path: Path, parts: list[tuple[
     if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION):
         return None
     rules_path.write_bytes(unit_rules_text(parts).encode("ascii"))
+    return rules_path
+
+
+# Every key here was settled by real BOB runs against a hand-built tree, not by analogy:
+#   - the section is [RigidModelV2] and the processor is Cs2. A [Tree] or [RigidMesh] section
+#     registers no action for a .CS2 at all - BOB exits 0 having done nothing.
+#   - AnimationType = tree is what stamps `tree` into the compiled m_bone_table_name, exactly as
+#     `building` does for buildings. There is no tree.bone_table anywhere in the kit and BOB does
+#     not want one: it writes the .CS2's own bone indices straight through.
+#   - CreateRigidModelDescriptionFile is misleadingly documented. It is what makes BOB emit the
+#     <name>_tech.cs2.parsed sidecar - the burn hull plus the fire emitters spread over it - and
+#     without it only the .rigid_model_v2 appears.
+#   - IncendiaryRadius sets how densely those emitters are spread ("2 incendiary points have been
+#     generated" for a small oak at 2.0, matching what the shipped trees carry).
+#   - LODDistance1..4 are the fixed ladder; which rung a mesh lands on comes from its node's
+#     _lodNN postfix, not from the order the nodes appear in.
+# `Tree = true`, the billboard switch, is deliberately absent - see the note below it.
+_VEGETATION_RULES_TEMPLATE = (
+    "[RigidModelV2]\r\n"
+    "\tTargetPath = {target_path}\r\n"
+    "\tTextureFolder = {texture_folder}\r\n"
+    "\tTextureSubFolder={texture_subfolder}\r\n"
+    "\tAnimationType = tree\r\n"
+    "\tCreateRigidModelDescriptionFile = true\r\n"
+    "\tIncendiaryRadius = 2.0\r\n"
+    "\tLODDistance1 = 100\r\n"
+    "\tLODDistance2 = 200\r\n"
+    "\tLODDistance3 = 400\r\n"
+    "\tLODDistance4 = 500\r\n"
+)
+
+# Setting `Tree = true` - the key whose own documentation string is "True if tree billboard
+# processing is required" - makes BOB dereference a null pointer inside
+# Warscape.AssemblyKit.dll+0x12a71 and abort with 0xC0000005 before it builds anything. Measured
+# under a debugger, reproducibly, on a plain default-material .CS2 as well as on a tree, so it is
+# the switch itself and not the model. Leaving it out costs the generated billboard LOD and nothing
+# else. Deliberately not surfaced to the artist: there is nothing they can do about it, and a
+# warning on every correct export is noise.
+
+# BOB does not copy the gloss map's filename through the way it does the diffuse and the normal: it
+# rebuilds it as <everything before the source's last underscore>_gloss_map.dds. Measured by feeding
+# it two sources with no underscore at all, which produced a bare "_gloss_map.dds". So the game's own
+# test_gloss_map.dds was authored as test_gloss.tga, and re-exporting a model whose gloss slot still
+# points at the compiled name gets test_gloss_gloss_map.dds instead.
+GLOSS_MAP_SUFFIX = "_gloss_map"
+
+
+def compiled_gloss_map_name(source_stem: str) -> str:
+    return source_stem.rpartition("_")[0] + GLOSS_MAP_SUFFIX
+
+
+VEGETATION_SECTION = UNIT_SECTION
+VEGETATION_TARGET_PATH = "BattleTerrain" + BACKSLASH + "vegetation" + BACKSLASH + "trees" + BACKSLASH
+VEGETATION_TEXTURE_SUBFOLDER = "textures"
+
+
+def _is_addon_vegetation_rules(text: str) -> bool:
+    return "AnimationType = tree" in text and "CreateRigidModelDescriptionFile = true" in text
+
+
+def vegetation_rules_text(target_path: str, texture_folder: str, texture_subfolder: str) -> str:
+    return _VEGETATION_RULES_TEMPLATE.format(
+        target_path=target_path, texture_folder=texture_folder, texture_subfolder=texture_subfolder
+    )
+
+
+def vegetation_paths_for(assembly_kit_root: str, cs2_path: Path) -> tuple[str, str, str]:
+    # BOB writes the compiled model under working_data at TargetPath and stamps
+    # TextureFolder + TextureSubFolder into every mesh's texture directory, so mirroring the .CS2's
+    # own place inside raw_data is what puts an exported tree where the game's own trees live.
+    directory = Path(cs2_path).resolve().parent
+    try:
+        relative = directory.relative_to((Path(assembly_kit_root) / "raw_data").resolve())
+    except (ValueError, OSError):
+        return VEGETATION_TARGET_PATH, VEGETATION_TARGET_PATH, VEGETATION_TEXTURE_SUBFOLDER
+    target = str(relative).replace("/", BACKSLASH) + BACKSLASH
+    textures = str(relative.parent).replace("/", BACKSLASH) + BACKSLASH + VEGETATION_TEXTURE_SUBFOLDER + BACKSLASH
+    return target, textures, relative.name
+
+
+def vegetation_rules_written_by_addon(cs2_path: Path) -> bool:
+    try:
+        text = (Path(cs2_path).parent / RULES_FILENAME).read_bytes().decode("ascii", errors="replace")
+    except OSError:
+        return False
+    return _is_addon_vegetation_rules(text)
+
+
+def ensure_vegetation_rules(assembly_kit_root: str, cs2_path: Path) -> Path | None:
+    if not inside_raw_data(assembly_kit_root, cs2_path):
+        return None
+    rules_path = Path(cs2_path).parent / RULES_FILENAME
+    if rules_path.exists() or _rule_in_scope(assembly_kit_root, cs2_path, VEGETATION_SECTION):
+        return None
+    paths = vegetation_paths_for(assembly_kit_root, cs2_path)
+    rules_path.write_bytes(vegetation_rules_text(*paths).encode("ascii"))
     return rules_path
 
 
