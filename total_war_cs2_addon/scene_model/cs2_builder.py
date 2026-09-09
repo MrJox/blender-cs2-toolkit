@@ -310,6 +310,7 @@ def _material_key(material: MaterialDef) -> tuple:
         material.dirt_uv_offset_v,
         material.alpha_mode,
         material.uv2_layer_name,
+        material.tree_colours,
     )
 
 

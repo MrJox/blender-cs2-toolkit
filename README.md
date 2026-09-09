@@ -1,7 +1,7 @@
 # Blender CS2 Toolkit
 
-A Blender add-on for authoring **Total War** battlefield assets — buildings, units, skeletons, and
-skeletal animation, with ships, artillery, siege vehicles, and vegetation in progress — as `.CS2`
+A Blender add-on for authoring **Total War** battlefield assets — buildings, units, skeletons,
+skeletal animation and vegetation, with ships, artillery and siege vehicles in progress — as `.CS2`
 files, replacing the original 3ds Max pipeline (3ds Max → MaxScripts → `cas2_exporter.dle` → `.CS2`
 → BOB → game files) with an artist-first Blender workflow that hands off to the same BOB compiler at
 the same point.
@@ -25,7 +25,7 @@ assumed-compatible until someone verifies them.
 | Ships | Research only — no code yet. See `PLAN_ships.md`. |
 | Artillery & siege engines | Research only. See `PLAN_artillery.md`. |
 | Vehicles | Research only; a vehicle turns out to be an ordinary building plus a `[SiegeVehicle]` rule. See `PLAN_vehicles.md`. |
-| Vegetation | Research only; compiled formats validated against real game files, but authoring/export is unconfirmed pending a first BOB run. See `PLAN_vegetation.md`. |
+| Vegetation (trees, shrubs, stones - import & export) | Confirmed working, BOB-confirmed: an imported game tree re-exports, compiles, and matches the shipped model. Only authored LODs are imported - the burn hull, its fire emitters and the far-distance billboard are BOB's own output, rebuilt from the model on every build. BOB's tree-billboard step crashes on the Attila kit, so a built model has no billboard. See `PLAN_vegetation.md`. |
 
 The `PLAN_*.md` files referenced above are working documents kept alongside the addon in the
 project's development directory rather than in this repository (see [Repository scope](#repository-scope)).

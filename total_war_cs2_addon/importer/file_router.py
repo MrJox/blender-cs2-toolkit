@@ -11,7 +11,7 @@ from .cs2_importer import import_cs2
 from .cs2_parsed_importer import import_cs2_parsed
 from .rigid_model_v2_importer import import_rigid_model_v2
 from .skeleton_importer import import_skeleton
-from .vegetation_importer import import_vegetation, import_vegetation_tech, is_vegetation_model
+from .vegetation_importer import import_vegetation, is_vegetation_model
 from .vmd_importer import import_vmd
 
 # Which workflow each kind of file belongs to, so importing one leaves the sidebar showing the
@@ -83,13 +83,16 @@ def import_file(filepath: str, context: bpy.types.Context) -> tuple[bpy.types.Co
         kind = "VARIANT MESH"
     elif name.endswith(".cs2.parsed"):
         # Vegetation's sidecar shares the extension but is version 0 - a bare hull with no building
-        # header at all - so the building reader cannot even open it.
+        # header at all - so the building reader cannot even open it. It is still recognised here so
+        # that picking one says what it is rather than failing inside the building reader.
         if is_vegetation_tech(Path(bpy.path.abspath(filepath)).read_bytes()):
-            collection, warnings = import_vegetation_tech(filepath, context)
-            kind = "VEGETATION"
-        else:
-            collection, warnings = import_cs2_parsed(filepath, context)
-            kind = "BUILDING"
+            raise UnsupportedFileError(
+                f"'{Path(filepath).name}' is a tree's burn hull and fire emitters, which BOB generates "
+                "from the model on every build - there is nothing in it to author, so it is not "
+                "imported. Import the .rigid_model_v2 beside it instead."
+            )
+        collection, warnings = import_cs2_parsed(filepath, context)
+        kind = "BUILDING"
     elif name.endswith(".cs2"):
         collection, warnings, kind = _import_cs2_document(filepath, context)
     else:

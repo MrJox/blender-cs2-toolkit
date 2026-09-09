@@ -131,20 +131,31 @@ TW_ROLE_ITEMS = [
         "Vegetation Model",
         "One tree, shrub or stone - becomes a single .rigid_model_v2 plus its _tech.cs2.parsed sidecar. Holds one collection per LOD, plus whatever BOB generated for it.",
     ),
+    # Retired along with the two below: a vegetation model now holds its LOD meshes in one Display
+    # collection, the way a building and a unit model do, rather than one collection per LOD.
     (
         "VEGETATION_LOD",
-        "Vegetation LOD",
-        "One level of detail of a vegetation model, holding a bark mesh, a leaf mesh, or both. Which LOD it is decides the camera distance it appears at: LOD 1 is 100m, LOD 2 200m, LOD 3 400m.",
+        "Vegetation LOD (retired)",
+        "No longer used - a vegetation model's LOD meshes sit together in its Display collection, each with its own LOD Level.",
     ),
+    # Retired for the same reason UNIT_PART above is: tw_role is a static EnumProperty, so dropping
+    # an entry invalidates the value in every scene that already carries it. Nothing creates either
+    # of these any more - BOB rebuilds the billboard and the burn hull from the model on every build,
+    # so importing them only put objects in the scene that an artist could edit to no effect.
     (
         "VEGETATION_BILLBOARD",
-        "Generated Billboard",
-        "The far-distance camera-aligned quad BOB generates from the model, with the atlas it also generates. Imported for reference only - it is never authored, so editing it changes nothing.",
+        "Generated Billboard (retired)",
+        "No longer used - BOB generates the far-distance billboard from the model, so it is neither imported nor exported.",
     ),
     (
         "VEGETATION_FIRE",
-        "Generated Fire Hull",
-        "The burn hull BOB derives from the lowest LOD, and the fire VFX emitters it distributes over that hull. Imported for reference only - both are generated, not authored.",
+        "Generated Fire Hull (retired)",
+        "No longer used - BOB derives the burn hull from the lowest LOD and spreads the fire emitters over it, so neither is imported nor exported.",
+    ),
+    (
+        "VEGETATION_DISPLAY",
+        "Display",
+        "The meshes a tree, shrub or stone is drawn from - one per level of detail, each with its own LOD Level. A mesh carrying both a Tree and a Tree Leaf material exports as one object and is split by material on the way into the game.",
     ),
 ]
 
@@ -180,8 +191,8 @@ TW_WORKFLOW_ITEMS = [
     (
         "VEGETATION",
         "Vegetation",
-        "Read battlefield trees, shrubs and stones back from their compiled .rigid_model_v2 and "
-        "_tech.cs2.parsed. Import only - authoring one is not implemented",
+        "Author battlefield trees, shrubs and stones - their LOD meshes and the two vegetation "
+        "materials, exported as a .CS2 for BOB to build",
     ),
 ]
 
@@ -212,6 +223,28 @@ LOD_ITEMS = [
     ("LOD04", "LOD 4", "Second-lowest level of detail"),
     ("LOD05", "LOD 5", "Lowest level of detail - shown at the furthest camera distance"),
 ]
+
+# Vegetation's own LOD list. Three entries, not the five LOD_ITEMS offers, because the fourth rung
+# of the ladder belongs to the billboard BOB generates - offering a level that cannot be authored
+# would be offering a mistake. BOB reads the rung off the exported node's "_lodNN" postfix, so this
+# is a real authoring choice rather than an ordering: a shrub authored as LOD 2 and LOD 3 gets 200m
+# and 400m and simply has no 100m mesh, which is exactly what the game's own shrubs do.
+VEGETATION_LOD_ITEMS = [
+    ("LOD01", "LOD 1 - out to 100m", "Highest level of detail, drawn from the camera out to 100 metres"),
+    ("LOD02", "LOD 2 - out to 200m", "Second level of detail, drawn out to 200 metres"),
+    ("LOD03", "LOD 3 - out to 400m", "Lowest authored level of detail, drawn out to 400 metres. BOB's generated billboard takes over past it"),
+]
+
+VEGETATION_LOD_INDEX_BY_IDENTIFIER = {
+    identifier: index for index, (identifier, _label, _description) in enumerate(VEGETATION_LOD_ITEMS, start=1)
+}
+
+VEGETATION_LOD_LABELS = {identifier: label for identifier, label, _description in VEGETATION_LOD_ITEMS}
+
+VEGETATION_LOD_IDENTIFIER_BY_INDEX = {
+    index: identifier for identifier, index in VEGETATION_LOD_INDEX_BY_IDENTIFIER.items()
+}
+
 
 UNIT_PART_KIND_LABELS = {identifier: label for identifier, label, _description in UNIT_PART_KIND_ITEMS}
 
@@ -570,6 +603,17 @@ def register() -> None:
         default="WEIGHTED",
     )
 
+    bpy.types.Object.tw_vegetation_lod = bpy.props.EnumProperty(
+        items=VEGETATION_LOD_ITEMS,
+        name="LOD Level",
+        description=(
+            "Which level of detail this mesh is, and so the camera distance it is drawn out to. Skipping "
+            "a level is allowed and means what it says: a shrub that starts at LOD 2 is simply never "
+            "drawn at the closest distance, rather than having its levels shuffle up"
+        ),
+        default="LOD01",
+    )
+
     bpy.types.Collection.tw_damage_parent = bpy.props.PointerProperty(
         type=bpy.types.Collection,
         name="Damage Parent",
@@ -786,6 +830,7 @@ def unregister() -> None:
     del bpy.types.Object.tw_platform_type
     del bpy.types.Object.tw_collision_type
     del bpy.types.Collection.tw_damage_parent
+    del bpy.types.Object.tw_vegetation_lod
     del bpy.types.Collection.tw_unit_part_kind
     del bpy.types.Collection.tw_asset_type
     del bpy.types.Collection.tw_role

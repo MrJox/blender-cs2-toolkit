@@ -9,6 +9,7 @@ from binary.bone_table import ROOT_BONE_TYPE
 from materials.shader_types import (
     SHADER_TYPE_LABELS,
     UV2_TEXTURE_SLOT_BY_SHADER_TYPE,
+    VEGETATION_SHADER_TYPES,
     WEIGHTED_SHADER_TYPES,
 )
 from props.properties import (
@@ -16,6 +17,7 @@ from props.properties import (
     COLLISION_TYPE_LABELS,
     LOD_INDEX_BY_IDENTIFIER,
     LOD_LABELS,
+    VEGETATION_LOD_LABELS,
     NESTED_DISPLAY_ROLES,
     NO_BONE_TYPE,
 )
@@ -27,6 +29,7 @@ from extraction.unit_extract import (
     unit_kind,
     unit_model_collections,
 )
+from extraction.vegetation_extract import vegetation_display_collections, vegetation_mesh_objects
 from scene_model.unit_models import MAX_BONE_INFLUENCES, WEIGHTED_KIND
 
 
@@ -1071,6 +1074,90 @@ def validate_animation(
                 action.name,
             )
         )
+    return issues
+
+
+# The four slots BOB refuses a tree mesh without. Its own message names the .fx sampler
+# ("is missing texture 't_smoothness'"), which is not a name the artist ever sees, so the check that
+# saves the round trip is this one rather than reading the build log (PLAN_vegetation.md 11.5).
+_VEGETATION_REQUIRED_SLOTS = ("Diffuse", "Normal", "Specular", "Gloss")
+
+
+def _validate_vegetation_textures(obj: bpy.types.Object) -> list[ValidationIssue]:
+    material = obj.active_material
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return []
+    missing = []
+    for slot in _VEGETATION_REQUIRED_SLOTS:
+        # create_total_war_material fills every slot with a placeholder, which read_material_def
+        # exports as an empty path - so "no image" and "the stand-in image" are the same thing here.
+        image = getattr(material.node_tree.nodes.get(slot), "image", None)
+        if image is None or is_placeholder_image(image):
+            missing.append(slot)
+    if not missing:
+        return []
+    return [
+        ValidationIssue(
+            "WARNING",
+            f"'{material.name}' has no {', '.join(missing)} texture. BOB refuses a vegetation mesh that "
+            "leaves any of Diffuse, Normal, Specular or Gloss empty - the game's own trees point the "
+            "last two at shared flat swatches (test_gray, test_gloss).",
+            obj.name,
+        )
+    ]
+
+
+def validate_vegetation(model_collection: bpy.types.Collection) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = _validate_export_name(model_collection.name)
+    if not vegetation_display_collections(model_collection):
+        return issues + [
+            ValidationIssue(
+                "ERROR",
+                f"'{model_collection.name}' has no Display collection - that is where its LOD meshes go.",
+                model_collection.name,
+            )
+        ]
+
+    objects = vegetation_mesh_objects(model_collection)
+    if not objects:
+        return issues + [
+            ValidationIssue(
+                "ERROR",
+                f"'{model_collection.name}' has no meshes yet - put one in its Display collection and give "
+                "it a Tree or Tree Leaf material.",
+                model_collection.name,
+            )
+        ]
+
+    seen: dict[str, str] = {}
+    for obj in objects:
+        existing = seen.get(obj.tw_vegetation_lod)
+        if existing is not None:
+            issues.append(
+                ValidationIssue(
+                    "ERROR",
+                    f"'{obj.name}' and '{existing}' are both {VEGETATION_LOD_LABELS.get(obj.tw_vegetation_lod, obj.tw_vegetation_lod)} - "
+                    "each mesh needs its own LOD Level.",
+                    obj.name,
+                )
+            )
+        else:
+            seen[obj.tw_vegetation_lod] = obj.name
+
+        issues.extend(_validate_display_object(obj))
+        issues.extend(_validate_vegetation_textures(obj))
+        for slot in obj.material_slots:
+            shader_type = getattr(slot.material, "tw_shader_type", "") if slot.material else ""
+            if shader_type and shader_type not in VEGETATION_SHADER_TYPES:
+                issues.append(
+                    ValidationIssue(
+                        "ERROR",
+                        f"'{obj.name}' uses the {SHADER_TYPE_LABELS.get(shader_type, shader_type)} shader on "
+                        f"'{slot.material.name}'. A vegetation mesh has to use Tree or Tree Leaf - BOB rejects "
+                        "any other shader on a model it builds as a tree.",
+                        obj.name,
+                    )
+                )
     return issues
 
 

@@ -12,6 +12,7 @@ PACK_CONFIGURATION_NAME = "blender_pack"
 SKELETON_CONFIGURATION_NAME = "blender_skeleton"
 UNIT_CONFIGURATION_NAME = "blender_unit"
 ANIMATION_CONFIGURATION_NAME = "blender_animation"
+VEGETATION_CONFIGURATION_NAME = "blender_vegetation"
 TIMEOUT_SECONDS = 900
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -539,6 +540,28 @@ def start_unit_build(assembly_kit_root: str, cs2_paths: list[Path]) -> BobRun:
 
 def compile_unit_parts(assembly_kit_root: str, cs2_paths: list[Path]) -> BobResult:
     return start_unit_build(assembly_kit_root, cs2_paths).wait()
+
+
+def vegetation_output_dir(assembly_kit_root: str, cs2_path: Path) -> Path:
+    # A tree's TargetPath mirrors its own place inside raw_data, so BOB's output lands beside where
+    # the game's own vegetation lives rather than in the units' shared folder.
+    return working_data_output_dir(assembly_kit_root, cs2_path)
+
+
+def start_vegetation_build(assembly_kit_root: str, cs2_paths: list[Path]) -> BobRun:
+    if not cs2_paths:
+        raise BobError("There is nothing to build.")
+    return _cs2_run(
+        assembly_kit_root,
+        cs2_paths,
+        VEGETATION_CONFIGURATION_NAME,
+        "vegetation model",
+        str(vegetation_output_dir(assembly_kit_root, cs2_paths[0])),
+    )
+
+
+def compile_vegetation(assembly_kit_root: str, cs2_path: Path) -> BobResult:
+    return start_vegetation_build(assembly_kit_root, [cs2_path]).wait()
 
 
 def start_animation_build(assembly_kit_root: str, cs2_path: Path) -> BobRun:
