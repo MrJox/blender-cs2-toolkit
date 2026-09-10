@@ -4,7 +4,7 @@ from bob.cli import start_skeleton_batch, start_unit_build
 from export.skeleton_exporter import export_skeleton
 from export.unit_exporter import export_unit
 from extraction.animation_extract import sample_bone_matrices
-from extraction.unit_extract import find_unit_armature, unit_model_collections
+from extraction.unit_extract import find_unit_armature, skeleton_name_for, unit_model_collections
 from props.properties import (
     get_assembly_kit_root,
     NO_BONE_TYPE,
@@ -14,6 +14,7 @@ from props.properties import (
 from validation.rules import validate_skeleton, validate_unit
 from .animation_operators import clips_for
 from .collection_utils import find_skeleton_collection, find_unit_collection
+from .rules_options import SkeletonRulesOptions, UnitRulesOptions
 from .operators import (
     BobWaitMixin,
     draw_export_targets,
@@ -476,7 +477,7 @@ class TW_OT_validate_skeleton(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class TW_OT_export_skeleton(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
+class TW_OT_export_skeleton(ExportTargetsMixin, BobWaitMixin, SkeletonRulesOptions, bpy.types.Operator):
     bl_idname = "tw_buildings.export_skeleton"
     bl_label = "Export Skeleton"
     bl_description = (
@@ -511,6 +512,7 @@ class TW_OT_export_skeleton(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator
     def draw(self, context: bpy.types.Context) -> None:
         draw_export_targets(self.layout, self.targets, "Skeleton", "skeletons")
         self.layout.prop(self, "compile_with_bob")
+        self.draw_rules_options(self.layout)
 
     def execute(self, context: bpy.types.Context):
         skeletons = self.resolve_targets(context)
@@ -525,8 +527,22 @@ class TW_OT_export_skeleton(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator
             self.report({"ERROR"}, "Set the Assembly Kit folder in the add-on preferences first.")
             return {"CANCELLED"}
 
+        blocked_on_rules = self.blocked_on_rules_overwrite(context, assembly_kit_root)
+        if blocked_on_rules is not None:
+            return blocked_on_rules
+
         names = [skeleton.name for skeleton in skeletons]
-        results = [export_skeleton(skeleton, self.directory, assembly_kit_root) for skeleton in skeletons]
+        rules_settings = self.rules_settings_or_none()
+        results = [
+            export_skeleton(
+                skeleton,
+                self.directory,
+                assembly_kit_root,
+                rules_settings,
+                self.rules_overwrite_confirmed,
+            )
+            for skeleton in skeletons
+        ]
         report_export_warnings(self, names, results)
         blocked = export_failure_message(names, results)
         if blocked is not None:
@@ -755,7 +771,16 @@ class TW_OT_validate_unit(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
+# The folder default only means anything when the whole batch agrees on one skeleton. Two different
+# ones, or none at all, leaves it empty - which is what a folder of weapons and shields wants anyway,
+# and every asset still carries its own line.
+def _bound_skeleton_name(units: list[bpy.types.Collection]) -> str:
+    armatures = [find_unit_armature(unit) for unit in units]
+    names = {skeleton_name_for(armature) for armature in armatures if armature is not None}
+    return names.pop() if len(names) == 1 else ""
+
+
+class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, UnitRulesOptions, bpy.types.Operator):
     bl_idname = "tw_buildings.export_units"
     bl_label = "Export Unit Models"
     bl_description = (
@@ -782,14 +807,17 @@ class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
     )
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
-        if self.collect_targets(context) is None:
+        units = self.collect_targets(context)
+        if units is None:
             return {"CANCELLED"}
+        self.rules_animation_type = _bound_skeleton_name(units)
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 
     def draw(self, context: bpy.types.Context) -> None:
         draw_export_targets(self.layout, self.targets, "Unit asset", "unit assets")
         self.layout.prop(self, "compile_with_bob")
+        self.draw_rules_options(self.layout)
 
     def execute(self, context: bpy.types.Context):
         units = self.resolve_targets(context)
@@ -804,8 +832,23 @@ class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
             self.report({"ERROR"}, "Set the Assembly Kit folder in the add-on preferences first.")
             return {"CANCELLED"}
 
+        blocked_on_rules = self.blocked_on_rules_overwrite(context, assembly_kit_root)
+        if blocked_on_rules is not None:
+            return blocked_on_rules
+
         names = [unit.name for unit in units]
-        results = [export_unit(unit, self.directory, assembly_kit_root, context) for unit in units]
+        rules_settings = self.rules_settings_or_none()
+        results = [
+            export_unit(
+                unit,
+                self.directory,
+                assembly_kit_root,
+                context,
+                rules_settings,
+                self.rules_overwrite_confirmed,
+            )
+            for unit in units
+        ]
         report_export_warnings(self, names, results)
         blocked = export_failure_message(names, results)
         if blocked is not None:
@@ -824,7 +867,10 @@ class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
         if not self.compile_with_bob:
             self.report({"INFO"}, message)
             return {"FINISHED"}
-        return self.wait_for_bob(context, lambda: start_unit_build(assembly_kit_root, cs2_paths), message)
+        target_path = self.rules_settings().target_path
+        return self.wait_for_bob(
+            context, lambda: start_unit_build(assembly_kit_root, cs2_paths, target_path), message
+        )
 
 
 CLASSES = (

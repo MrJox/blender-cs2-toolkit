@@ -19,6 +19,7 @@ from importer import import_file, UnsupportedFileError
 from importer.messages import severity_of
 from importer.rigid_model_v2_importer import models_needing_a_skeleton
 from importer.proxy_loader import get_arrow_emitter_proxy_geometry, FLAG_VERTICES, FLAG_FACES
+from .rules_options import BuildingRulesOptions
 from .collection_utils import (
     export_batch,
     find_building_collection,
@@ -676,6 +677,9 @@ class ExportTargetsMixin:
     # takes a context override that has no business running inside a draw callback. Names, because
     # an operator property cannot hold a Collection.
     targets: bpy.props.CollectionProperty(type=TW_PG_export_target, options={"HIDDEN"})
+    # The same names again as plain text. A CollectionProperty cannot be passed to bpy.ops, and an
+    # export that stops to ask about rules.bob is restarted through exactly that.
+    target_names: bpy.props.StringProperty(default="", options={"HIDDEN"})
     asset_role: str
     asset_noun: str
 
@@ -698,15 +702,19 @@ class ExportTargetsMixin:
         self.targets.clear()
         for asset in assets:
             self.targets.add().name = asset.name
+        self.target_names = "\n".join(asset.name for asset in assets)
         return assets
 
     # execute() runs on its own whenever the operator is called from a script, so the names invoke()
     # stored are a shortcut rather than the only source.
     def resolve_targets(self, context: bpy.types.Context) -> list[bpy.types.Collection] | None:
-        if not self.targets:
+        names = [target.name for target in self.targets] or [
+            name for name in self.target_names.splitlines() if name
+        ]
+        if not names:
             return self.collect_targets(context)
-        assets = [bpy.data.collections.get(target.name) for target in self.targets]
-        missing = [target.name for target, asset in zip(self.targets, assets) if asset is None]
+        assets = [bpy.data.collections.get(name) for name in names]
+        missing = [name for name, asset in zip(names, assets) if asset is None]
         if missing:
             self.report({"ERROR"}, f"{', '.join(missing)} is no longer in the scene - select again.")
             return None
@@ -782,7 +790,7 @@ class BobWaitMixin:
         return {"FINISHED"} if bob_result.success else {"CANCELLED"}
 
 
-class TW_OT_export_building(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
+class TW_OT_export_building(ExportTargetsMixin, BobWaitMixin, BuildingRulesOptions, bpy.types.Operator):
     bl_idname = "tw_buildings.export_building"
     bl_label = "Export Building"
     bl_description = (
@@ -841,6 +849,7 @@ class TW_OT_export_building(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator
         pack_type_row = layout.row()
         pack_type_row.enabled = self.compile_with_bob and self.create_pack
         pack_type_row.prop(self, "pack_type")
+        self.draw_rules_options(layout)
 
     def execute(self, context: bpy.types.Context):
         buildings = self.resolve_targets(context)
@@ -856,8 +865,21 @@ class TW_OT_export_building(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator
             self.report({"ERROR"}, "Set the Assembly Kit folder in the add-on preferences first.")
             return {"CANCELLED"}
 
+        blocked_on_rules = self.blocked_on_rules_overwrite(context, assembly_kit_root)
+        if blocked_on_rules is not None:
+            return blocked_on_rules
+
+        rules_settings = self.rules_settings_or_none()
         results = [
-            export_building(building, self.directory, assembly_kit_root, context) for building in buildings
+            export_building(
+                building,
+                self.directory,
+                assembly_kit_root,
+                context,
+                rules_settings,
+                self.rules_overwrite_confirmed,
+            )
+            for building in buildings
         ]
         report_export_warnings(self, [building.name for building in buildings], results)
         blocked = export_failure_message([building.name for building in buildings], results)

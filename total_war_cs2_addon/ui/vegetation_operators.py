@@ -5,6 +5,7 @@ from export.vegetation_exporter import export_vegetation
 from props.properties import TW_ROLE_LABELS, get_assembly_kit_root
 from validation.rules import validate_vegetation
 from .collection_utils import find_vegetation_collection
+from .rules_options import VegetationRulesOptions
 from .operators import (
     BobWaitMixin,
     draw_export_targets,
@@ -85,7 +86,7 @@ class TW_OT_validate_vegetation(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class TW_OT_export_vegetation(ExportTargetsMixin, BobWaitMixin, bpy.types.Operator):
+class TW_OT_export_vegetation(ExportTargetsMixin, BobWaitMixin, VegetationRulesOptions, bpy.types.Operator):
     bl_idname = "tw_buildings.export_vegetation"
     bl_label = "Export Vegetation"
     bl_description = (
@@ -119,6 +120,7 @@ class TW_OT_export_vegetation(ExportTargetsMixin, BobWaitMixin, bpy.types.Operat
     def draw(self, context: bpy.types.Context) -> None:
         draw_export_targets(self.layout, self.targets, "Vegetation model", "vegetation models")
         self.layout.prop(self, "compile_with_bob")
+        self.draw_rules_options(self.layout)
 
     def execute(self, context: bpy.types.Context):
         models = self.resolve_targets(context)
@@ -133,8 +135,23 @@ class TW_OT_export_vegetation(ExportTargetsMixin, BobWaitMixin, bpy.types.Operat
             self.report({"ERROR"}, "Set the Assembly Kit folder in the add-on preferences first.")
             return {"CANCELLED"}
 
+        blocked_on_rules = self.blocked_on_rules_overwrite(context, assembly_kit_root)
+        if blocked_on_rules is not None:
+            return blocked_on_rules
+
         names = [model.name for model in models]
-        results = [export_vegetation(model, self.directory, assembly_kit_root, context) for model in models]
+        rules_settings = self.rules_settings_or_none()
+        results = [
+            export_vegetation(
+                model,
+                self.directory,
+                assembly_kit_root,
+                context,
+                rules_settings,
+                self.rules_overwrite_confirmed,
+            )
+            for model in models
+        ]
         report_export_warnings(self, names, results)
         blocked = export_failure_message(names, results)
         if blocked is not None:

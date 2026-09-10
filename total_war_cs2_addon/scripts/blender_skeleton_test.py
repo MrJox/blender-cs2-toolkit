@@ -241,7 +241,7 @@ def main() -> None:
 
     print("=== rules.bob ===")
     check("skeleton rules match CA's own file byte for byte",
-          rules._SKELETON_RULES.encode("ascii") == (SKELETON_DIR / "rules.bob").read_bytes())
+          rules.skeleton_rules_text().encode("ascii") == (SKELETON_DIR / "rules.bob").read_bytes())
     with tempfile.TemporaryDirectory() as outside:
         check("no rules.bob is written outside raw_data",
               rules.ensure_skeleton_rules(str(Path(outside) / "kit"), Path(outside) / "x.CS2") is None)

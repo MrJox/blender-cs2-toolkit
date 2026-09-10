@@ -3,7 +3,13 @@ from pathlib import Path
 import bpy
 
 from binary.cs2_writer import write_cs2
-from bob.rules import ensure_animation_rules
+from bob.rules import (
+    ANIMATION_SECTION,
+    AnimationRules,
+    animation_rules_base,
+    ensure_animation_rules,
+    unwritten_settings_warning,
+)
 from export.skeleton_exporter import SKELETON_RAW_DATA_FOLDER, bone_table_folder
 from extraction.animation_extract import extract_animation
 from extraction.extract import ExtractionError
@@ -28,6 +34,8 @@ def export_animation(
     output_dir: str,
     assembly_kit_root: str,
     context: bpy.types.Context,
+    rules_settings: AnimationRules | None = AnimationRules(),
+    overwrite_rules: bool = False,
 ) -> ExportResult:
     issues = validate_animation(armature_object, action, context.scene)
     blocked = blocking_export_result(issues)
@@ -55,15 +63,29 @@ def export_animation(
             "'Unrecognised animation type or missing bone definition file'."
         )
 
-    created_rules = ensure_animation_rules(
-        assembly_kit_root, output_path, [(output_path.stem, skeleton.name, clip.frame_rate)]
-    )
-    if created_rules is None and (output_path.parent / "rules.bob").exists():
-        warnings.append(
-            f"A rules.bob this add-on did not write already covers {output_path.parent} - its "
-            "AnimationType and FPS are what BOB will use for this clip, not the skeleton and "
-            "rate shown here."
+    if rules_settings is not None:
+        created_rules = ensure_animation_rules(
+            assembly_kit_root,
+            output_path,
+            [(output_path.stem, skeleton.name, clip.frame_rate)],
+            rules_settings,
+            overwrite_rules,
         )
+        declined = unwritten_settings_warning(
+            assembly_kit_root,
+            output_path.parent,
+            ANIMATION_SECTION,
+            animation_rules_base(rules_settings),
+            rules_settings,
+        )
+        if declined is not None:
+            warnings.append(declined)
+        elif created_rules is None and (output_path.parent / "rules.bob").exists():
+            warnings.append(
+                f"A rules.bob this add-on did not write already covers {output_path.parent} - its "
+                "AnimationType and FPS are what BOB will use for this clip, not the skeleton and "
+                "rate shown here."
+            )
 
     return ExportResult(
         success=True,

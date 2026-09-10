@@ -8,6 +8,7 @@ from props.properties import get_assembly_kit_root
 from validation.rules import action_data_paths, validate_animation
 from .collection_utils import find_unit_collection
 from .operators import BobWaitMixin, export_blocked_headline, export_failure_message, report_export_warnings
+from .rules_options import AnimationRulesOptions
 from .panels import active_role_collection, object_section_visible
 
 
@@ -248,7 +249,7 @@ class TW_PG_animation_clip_choice(bpy.types.PropertyGroup):
     export: bpy.props.BoolProperty(name="Export", default=False)
 
 
-class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
+class TW_OT_export_animation(BobWaitMixin, AnimationRulesOptions, bpy.types.Operator):
     bl_idname = "tw_buildings.export_animation"
     bl_label = "Export Animation"
     bl_description = (
@@ -270,6 +271,10 @@ class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
         default=True,
     )
     clips: bpy.props.CollectionProperty(type=TW_PG_animation_clip_choice, options={"HIDDEN"})
+    # The ticked clips again as plain text, for the same reason as ExportTargetsMixin.target_names:
+    # a CollectionProperty cannot cross a bpy.ops call, and the rules.bob confirmation restarts this
+    # export through one.
+    clip_names: bpy.props.StringProperty(default="", options={"HIDDEN"})
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
         armature_object = self._armature(context)
@@ -285,6 +290,9 @@ class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
             choice = self.clips.add()
             choice.name = action.name
             choice.export = action == assigned
+        # clips_for already matched these clips to this Armature, so it is the skeleton they build
+        # against and the same name every per-clip line will carry.
+        self.rules_animation_type = skeleton_name_for(armature_object)
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 
@@ -295,6 +303,7 @@ class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
         box.label(text="Clips to export", icon="ANIM")
         for choice in self.clips:
             box.prop(choice, "export", text=choice.name)
+        self.draw_rules_options(layout)
 
     # Two selected skeletons are refused rather than silently resolved: animation_armature would pick
     # whichever happens to be active, and the artist would get one skeleton's clips exported under the
@@ -331,9 +340,23 @@ class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
             self.report({"ERROR"}, "Set the Assembly Kit folder in the add-on preferences first.")
             return {"CANCELLED"}
 
+        self.clip_names = "\n".join(action.name for action in actions)
+        blocked_on_rules = self.blocked_on_rules_overwrite(context, assembly_kit_root)
+        if blocked_on_rules is not None:
+            return blocked_on_rules
+
         names = [action.name for action in actions]
+        rules_settings = self.rules_settings_or_none()
         results = [
-            export_animation(armature_object, action, self.directory, assembly_kit_root, context)
+            export_animation(
+                armature_object,
+                action,
+                self.directory,
+                assembly_kit_root,
+                context,
+                rules_settings,
+                self.rules_overwrite_confirmed,
+            )
             for action in actions
         ]
         report_export_warnings(self, names, results)
@@ -358,10 +381,16 @@ class TW_OT_export_animation(BobWaitMixin, bpy.types.Operator):
     # Called from a script, invoke() never ran and self.clips is empty - the clip the skeleton is
     # holding is then the one to export, which is exactly what the button did before batching.
     def _chosen_actions(self, armature_object: bpy.types.Object) -> list[bpy.types.Action]:
-        if not self.clips:
-            assigned = armature_object.animation_data.action if armature_object.animation_data else None
-            return [assigned] if assigned is not None else []
-        chosen = [bpy.data.actions.get(choice.name) for choice in self.clips if choice.export]
+        if self.clips:
+            names = [choice.name for choice in self.clips if choice.export]
+        else:
+            names = [name for name in self.clip_names.splitlines() if name]
+            if not names:
+                assigned = (
+                    armature_object.animation_data.action if armature_object.animation_data else None
+                )
+                return [assigned] if assigned is not None else []
+        chosen = [bpy.data.actions.get(name) for name in names]
         return [action for action in chosen if action is not None]
 
 

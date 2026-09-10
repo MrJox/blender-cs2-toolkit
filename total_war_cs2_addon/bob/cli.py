@@ -524,17 +524,21 @@ def compile_skeleton(assembly_kit_root: str, cs2_path: Path) -> BobResult:
     return start_skeleton_build(assembly_kit_root, cs2_path).wait()
 
 
-def unit_output_dir(assembly_kit_root: str) -> Path:
-    return Path(assembly_kit_root) / "working_data" / Path(rules.UNIT_TARGET_PATH.replace(chr(92), "/"))
+def unit_output_dir(assembly_kit_root: str, target_path: str = rules.UNIT_TARGET_PATH) -> Path:
+    # Where BOB drops the compiled part is the rules.bob TargetPath, so a customised one has to
+    # reach the success message too or it names a folder nothing was written to.
+    return Path(assembly_kit_root) / "working_data" / Path(target_path.replace(chr(92), "/"))
 
 
-def start_unit_build(assembly_kit_root: str, cs2_paths: list[Path]) -> BobRun:
+def start_unit_build(
+    assembly_kit_root: str, cs2_paths: list[Path], target_path: str = rules.UNIT_TARGET_PATH
+) -> BobRun:
     return _cs2_run(
         assembly_kit_root,
         cs2_paths,
         UNIT_CONFIGURATION_NAME,
         "unit part",
-        str(unit_output_dir(assembly_kit_root)),
+        str(unit_output_dir(assembly_kit_root, target_path)),
     )
 
 
