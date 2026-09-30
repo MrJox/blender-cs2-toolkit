@@ -9,7 +9,8 @@ from binary import cs2_structures as s
 from scene_model.models import AnimationKeyframes
 from extraction.animation import bake_keyframes_onto_object
 from props.properties import EFLINE_ACTION_ITEMS, SHADER_TYPES, COLLISION_MESH_TYPES, TW_ROLE_LABELS
-from materials.material_builder import create_total_war_material, TW_PLACEHOLDER_MARKER
+from materials.material_builder import apply_decal_uv_rect, create_total_war_material, TW_PLACEHOLDER_MARKER
+from materials.shader_types import DECAL_SHADER_TYPES
 
 # Template for Arrow Emitters (in Blender Z-up space)
 _ARROW_EMITTER_TEMPLATE_VERTICES = [
@@ -622,6 +623,11 @@ def import_cs2(
                 for ia in mat_node.directx_material.integer_attributes:
                     if ia.name == "b_faction_colouring":
                         tint_node.inputs["Faction Colouring"].default_value = 1.0 if ia.value else 0.0
+
+            if mat.tw_shader_type in DECAL_SHADER_TYPES:
+                for va in mat_node.directx_material.vec4_attributes:
+                    if va.name == "vec4_uv_rect":
+                        apply_decal_uv_rect(mat, va.value)
 
         blender_materials.append(mat)
 

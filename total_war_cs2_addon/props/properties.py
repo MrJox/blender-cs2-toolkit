@@ -592,6 +592,13 @@ def _damage_parent_poll(collection: bpy.types.Collection, candidate: bpy.types.C
     return candidate.tw_role == "PIECE" and candidate is not collection
 
 
+def _sync_decal_uv(material: bpy.types.Material, _context: bpy.types.Context) -> None:
+    # materials.fx_nodegroup imports this module, so the builder cannot be imported at load time.
+    from materials.material_builder import sync_decal_uv
+
+    sync_decal_uv(material)
+
+
 def register() -> None:
     try:
         bpy.utils.register_class(TWBuildingsPreferences)
@@ -820,10 +827,34 @@ def register() -> None:
         default=DEFAULT_SHADER_TYPE,
     )
 
+    bpy.types.Material.tw_decal_uv_offset = bpy.props.FloatVectorProperty(
+        name="Decal Offset",
+        description="Where the decal's rectangle starts on the UV map. Measured from the top-left corner of the UV square, "
+        "exactly as the 3ds Max shader's Decal uv rect is, so the same numbers give the same result",
+        size=2,
+        default=(0.0, 0.0),
+        step=1,
+        precision=4,
+        update=_sync_decal_uv,
+    )
+
+    bpy.types.Material.tw_decal_uv_scale = bpy.props.FloatVectorProperty(
+        name="Decal Scale",
+        description="How much of the UV square the decal's rectangle covers. 1 spreads the decal over the whole UV map, "
+        "0.5 over half of it. Must not be 0",
+        size=2,
+        default=(1.0, 1.0),
+        step=1,
+        precision=4,
+        update=_sync_decal_uv,
+    )
+
 
 def unregister() -> None:
     del bpy.types.Action.tw_frame_rate
     del bpy.types.Action.tw_skeleton_name
+    del bpy.types.Material.tw_decal_uv_scale
+    del bpy.types.Material.tw_decal_uv_offset
     del bpy.types.Material.tw_shader_type
     del bpy.types.Material.tw_alpha_mode
     del bpy.types.Bone.tw_is_limb

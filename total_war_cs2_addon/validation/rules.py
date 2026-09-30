@@ -7,6 +7,7 @@ from extraction.animation import has_keyframed_animation
 from materials.material_builder import is_placeholder_image, read_uv2_layer_name
 from binary.bone_table import ROOT_BONE_TYPE
 from materials.shader_types import (
+    DECAL_SHADER_TYPES,
     SHADER_TYPE_LABELS,
     UV2_TEXTURE_SLOT_BY_SHADER_TYPE,
     VEGETATION_SHADER_TYPES,
@@ -830,6 +831,15 @@ def _validate_unit_shader(obj: bpy.types.Object, weighted: bool) -> list[Validat
                     "ERROR",
                     f"'{obj.name}' is in a Rigid Model but its material '{material.name}' uses "
                     f"'{label}' - a rigid item carries no bone weights for a weighted shader to read.",
+                    obj.name,
+                )
+            )
+        if shader_type in DECAL_SHADER_TYPES and 0.0 in tuple(material.tw_decal_uv_scale):
+            issues.append(
+                ValidationIssue(
+                    "ERROR",
+                    f"'{material.name}' on '{obj.name}' has a Decal Scale of 0. The shader divides by the "
+                    "scale to place the decal, so it must be non-zero in both directions.",
                     obj.name,
                 )
             )

@@ -10,8 +10,8 @@ from binary.rigid_model_v2_reader import read_rigid_model_v2
 from extraction.bone_space import blender_bone_to_engine, blender_object_to_engine
 from extraction.skeleton_extract import extract_skeleton_from_armature
 from extraction.unit_extract import armature_of
-from materials.material_builder import TW_PLACEHOLDER_MARKER, create_total_war_material
-from materials.shader_types import SHADER_TYPE_IDENTIFIERS
+from materials.material_builder import TW_PLACEHOLDER_MARKER, apply_decal_uv_rect, create_total_war_material
+from materials.shader_types import DECAL_SHADER_TYPES, SHADER_TYPE_IDENTIFIERS
 from props.properties import (
     LOD_IDENTIFIER_BY_INDEX,
     get_assembly_kit_root_or_empty,
@@ -27,7 +27,8 @@ from .skeleton_lookup import find_skeleton_source, searched_locations
 # shader never silently becomes a wrong one.
 SHADER_TYPE_BY_FLAGS = {
     rs.SHADER_STANDARD_V5: "default",
-    rs.SHADER_STANDARD_WITH_DECAL_DIRTMAP_V5: "default",
+    rs.SHADER_STANDARD_WITH_DECAL_V5: "decal",
+    rs.SHADER_STANDARD_WITH_DECAL_DIRTMAP_V5: "decal_dirtmap",
     rs.SHADER_STANDARD_TILED_DIRTMAP_V5: "tiled_dirtmap",
     rs.SHADER_WEIGHTED_V5: "weighted",
     rs.SHADER_WEIGHTED_SKIN_V5: "weighted_skin",
@@ -54,6 +55,8 @@ TEXTURE_NODE_BY_ID = {
     14: "Decal Dirtmask",
     15: "Decal Mask",
 }
+
+VEC4_PARAM_UV_RECT = 0
 
 
 # A compiled mesh is not stored in the space this add-on authors in, and the two corrections it
@@ -145,6 +148,10 @@ def _material_for(mesh: rs.Mesh, model_path: Path, warnings: list[str]) -> bpy.t
             if TW_PLACEHOLDER_MARKER in image:
                 del image[TW_PLACEHOLDER_MARKER]
             node.image = image
+        if shader_type in DECAL_SHADER_TYPES:
+            for parameter in header.vec4_params:
+                if parameter.param_id == VEC4_PARAM_UV_RECT:
+                    apply_decal_uv_rect(material, parameter.value)
     return material
 
 

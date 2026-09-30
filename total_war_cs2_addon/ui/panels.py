@@ -15,7 +15,7 @@ from .collection_utils import (
     find_piece_collection,
     get_object_collection_role,
 )
-from materials.shader_types import SHADER_TYPE_LABELS, shader_types_for_workflow
+from materials.shader_types import DECAL_SHADER_TYPES, SHADER_TYPE_LABELS, shader_types_for_workflow
 from .operators import DESTRUCT_COLLECTION_ROLES, BUILDING_COLLECTION_ROLES, DISPLAY_COLLECTION_ROLES
 
 # Workflows selectable in the switcher that no panel set answers to, so the sidebar would otherwise
@@ -364,6 +364,11 @@ class TW_PT_materials(WorkflowGatedPanel, bpy.types.Panel):
         if obj is not None and obj.active_material is not None:
             draw_shader_type_choice(layout, context, obj.active_material)
             layout.prop(obj.active_material, "tw_alpha_mode")
+            if obj.active_material.tw_shader_type in DECAL_SHADER_TYPES:
+                decal_box = layout.box()
+                decal_box.label(text="Decal UV")
+                decal_box.prop(obj.active_material, "tw_decal_uv_offset")
+                decal_box.prop(obj.active_material, "tw_decal_uv_scale")
         else:
             layout.label(text="Select a mesh with a material to set its shader", icon="INFO")
 

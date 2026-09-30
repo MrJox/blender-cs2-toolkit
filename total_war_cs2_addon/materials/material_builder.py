@@ -16,6 +16,8 @@ from materials.shader_types import (
     DEFAULT_ALPHA_MODE,
     ALPHA_TEST_ALPHA_MODE,
     BLEND_ALPHA_MODE,
+    DECAL_SHADER_TYPES,
+    DEFAULT_DECAL_UV_RECT,
     VEGETATION_SHADER_TYPES,
 )
 from scene_model.models import MaterialDef
@@ -202,7 +204,50 @@ def _vlerp(node_tree, a, b, factor, location, label: str = ""):
     return node.outputs["Vector"]
 
 
-def _build_decal(node_tree, diffuse, specular, reflectivity, normal_colour, vertex_alpha: bool, dy: int):
+DECAL_UV_RECT_NODE = "Decal UV Rect"
+
+
+def sync_decal_uv(material: bpy.types.Material) -> None:
+    if not material.use_nodes or material.node_tree is None:
+        return
+    node = material.node_tree.nodes.get(DECAL_UV_RECT_NODE)
+    if node is None or node.type != "MAPPING":
+        return
+    offset_u, offset_v = material.tw_decal_uv_offset
+    scale_u, scale_v = material.tw_decal_uv_scale
+    # The .fx measures v down from the top of the texture and Blender measures it up from the
+    # bottom, so the rect's far edge is what lands at Blender's v offset.
+    node.inputs["Location"].default_value = (offset_u, 1.0 - offset_v - scale_v, 0.0)
+    node.inputs["Scale"].default_value = (scale_u, scale_v, 1.0)
+
+
+def apply_decal_uv_rect(material: bpy.types.Material, rect: tuple[float, float, float, float]) -> None:
+    material.tw_decal_uv_offset = (rect[0], rect[1])
+    material.tw_decal_uv_scale = (rect[2] - rect[0], rect[3] - rect[1])
+
+
+def _build_decal_uv_rect(node_tree, decal_diffuse_node, decal_normal_node, dy: int) -> None:
+    # decal_uv = (uv - rect.xy) / (rect.zw - rect.xy), which is exactly a TEXTURE-type Mapping node's
+    # (v - Location) / Scale. Only the diffuse and normal read it - decal_mask samples the plain uv.
+    uv_node = node_tree.nodes.new("ShaderNodeUVMap")
+    uv_node.label = uv_node.name = "Decal UV"
+    uv_node.location = (-2100, -700 + dy)
+
+    rect_node = node_tree.nodes.new("ShaderNodeMapping")
+    rect_node.vector_type = "TEXTURE"
+    rect_node.label = rect_node.name = DECAL_UV_RECT_NODE
+    rect_node.location = (-1800, -700 + dy)
+    node_tree.links.new(uv_node.outputs["UV"], rect_node.inputs["Vector"])
+
+    for node in (decal_diffuse_node, decal_normal_node):
+        node_tree.links.new(rect_node.outputs["Vector"], node.inputs["Vector"])
+        # AddressU/V = CLAMP on both samplers.
+        node.extension = "EXTEND"
+
+
+def _build_decal(
+    node_tree, diffuse, specular, reflectivity, normal_colour, vertex_alpha: bool, dy: int, uv_rect: bool = False
+):
     # ps_common_blend_decal blends the asset's own material toward the decal set:
     #   decalblend   = decal_mask.a * decal_diffuse.a * valpha
     #   diffuse      = lerp(diffuse,      decal_diffuse.rgb, decalblend)
@@ -212,11 +257,13 @@ def _build_decal(node_tree, diffuse, specular, reflectivity, normal_colour, vert
     # ps30_main_custom_terrain passes valpha = 1 - vertex alpha so the mesh can paint the decal out
     # per vertex; ps30_main_decaldirt and ps30_full_skin both pass a literal 1.0 instead.
     # In game the decal side is the battlefield terrain projected onto the asset; in the Max preview,
-    # and here, it is whatever the decal slots hold. vec4_uv_rect is (0,0,1,1) in every real sample and
-    # the exporter writes that, so the decal samples the same UV as everything else.
+    # and here, it is whatever the decal slots hold. terrain_blend always exports vec4_uv_rect as
+    # (0,0,1,1), so only the decal shader types build the rect.
     decal_diffuse_node = _texture_node(node_tree, "Decal Diffuse", (-1400, -550 + dy))
     decal_normal_node = _texture_node(node_tree, "Decal Normal", (-1400, -900 + dy))
     decal_mask_node = _texture_node(node_tree, "Decal Mask", (-1400, -1250 + dy))
+    if uv_rect:
+        _build_decal_uv_rect(node_tree, decal_diffuse_node, decal_normal_node, dy)
 
     masked = node_tree.nodes.new("ShaderNodeMath")
     masked.operation = "MULTIPLY"
@@ -311,6 +358,8 @@ SHADER_FEATURES = {
     "weighted_decal_dirtmap": ("tint", "decal", "decal_dirtmap"),
     "weighted_skin_decal": ("skin", "decal"),
     "weighted_skin_decal_dirtmap": ("skin", "decal", "decal_dirtmap"),
+    "decal": ("tint", "decal"),
+    "decal_dirtmap": ("tint", "decal", "decal_dirtmap"),
     # No tint layer: a vegetation mesh carries no faction mask texture at all, and its three
     # COLOUR_ vec4 params are shader constants rather than the mask-driven layers "tint" builds.
     "tree": (),
@@ -514,8 +563,9 @@ def create_total_war_material(material: bpy.types.Material) -> None:
         # Below the tint/skin masks and, when present, the decal-dirtmap band above, which between
         # them occupy the -550..-2300 range of the same column.
         diffuse, specular, reflectivity, normal_colour = _build_decal(
-            node_tree, diffuse, specular, reflectivity, normal_colour, vertex_alpha=False, dy=-2400
+            node_tree, diffuse, specular, reflectivity, normal_colour, vertex_alpha=False, dy=-2400, uv_rect=True
         )
+        sync_decal_uv(material)
 
     if "decal_dirtmap" in features:
         diffuse, specular, normal_colour = _build_decal_dirtmap(
@@ -714,6 +764,14 @@ def _tree_colours(material: bpy.types.Material) -> tuple[tuple[float, float, flo
     )
 
 
+def _decal_uv_rect(material: bpy.types.Material) -> tuple[float, float, float, float]:
+    if getattr(material, "tw_shader_type", "default") not in DECAL_SHADER_TYPES:
+        return DEFAULT_DECAL_UV_RECT
+    offset_u, offset_v = material.tw_decal_uv_offset
+    scale_u, scale_v = material.tw_decal_uv_scale
+    return (offset_u, offset_v, offset_u + scale_u, offset_v + scale_v)
+
+
 def read_material_def(material: bpy.types.Material) -> MaterialDef:
     shader_type = getattr(material, "tw_shader_type", "default")
     uv2_layer_name = read_uv2_layer_name(material)
@@ -777,5 +835,6 @@ def read_material_def(material: bpy.types.Material) -> MaterialDef:
         dirt_uv_offset_u=dirt_uv_offset_u,
         dirt_uv_offset_v=dirt_uv_offset_v,
         alpha_mode=ALPHA_MODE_VALUES[getattr(material, "tw_alpha_mode", DEFAULT_ALPHA_MODE)],
+        decal_uv_rect=_decal_uv_rect(material),
         uv2_layer_name=uv2_layer_name,
     )
