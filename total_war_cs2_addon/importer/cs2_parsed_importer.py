@@ -10,6 +10,7 @@ from props.properties import (
     LINE_TYPE_BY_BUILDING_DATA_TYPE,
     BUILDING_DATA_TYPE_2DCOLLISION_HARD,
     BUILDING_DATA_TYPE_2DCOLLISION_GATE,
+    CLOSED_LINE_BUILDING_DATA_TYPES,
     GATE_COLLISION_TYPES,
 )
 from .zone_tech_importer import find_zone_tech_xml, import_zone_tech_xml
@@ -386,16 +387,20 @@ def import_cs2_parsed(filepath: str, context: bpy.types.Context) -> tuple[bpy.ty
                 lines_coll.tw_role = "LINES"
                 destruct_coll.children.link(lines_coll)
 
-            # A line is closed only when it actually comes back to its own start: a real
-            # ground_ad is a 2-vertex open line, and the gate hard lines are 4-vertex open
-            # ones, so closing every entry here turned real open lines into loops.
             for entry, entry_type in plain_entries + [(l, l.line_type) for l in gate_lines]:
                 if len(entry.vertices) < 2:
                     continue
                 blender_pts = [_to_blender_space(v) for v in entry.vertices]
+                # Closure comes from the type, not from the points: BOB strips the repeated start
+                # vertex when it compiles, so a compiled closed loop never returns to its own start
+                # and reading closure off the geometry marked every one of them open. That survived
+                # a round trip for outline/hard only because export force-closes those two anyway;
+                # a gate hard line re-exported open and BOB refused the building outright.
                 closed = _is_closed_loop(blender_pts)
                 if closed:
                     blender_pts = blender_pts[:-1]
+                else:
+                    closed = entry_type in CLOSED_LINE_BUILDING_DATA_TYPES
 
                 curve_data = bpy.data.curves.new(entry.name, type="CURVE")
                 curve_data.dimensions = "3D"

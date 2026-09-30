@@ -359,9 +359,11 @@ def build_cs2_document(building: BuildingAsset, assembly_kit_root: str, output_p
     for piece in building.pieces:
         for destruct in piece.destruct_levels:
             for lod in destruct.lod_meshes:
-                node_name = lod_node_name(piece.piece_index, destruct.destruct_index, lod.lod_index)
+                node_name = lod_node_name(piece.piece_index, destruct.destruct_index, lod.lod_index, lod.part_letter)
                 material_ids = [material_index_by_key[_material_key(m)] for m in lod.materials]
-                attributes = lod_attributes(piece.piece_index, destruct.destruct_index, lod.lod_index, building.name)
+                attributes = lod_attributes(
+                    piece.piece_index, destruct.destruct_index, lod.lod_index, building.name, lod.part_letter
+                )
                 rigid_models.append(
                     s.RigidModelNode(
                         node_name=node_name,

@@ -19,8 +19,8 @@ def platform_label(variation_index: int) -> str:
     return f"platform{variation_index:02d}"
 
 
-def lod_node_name(piece_index: int, destruct_index: int, lod_index: int) -> str:
-    return f"{piece_label(piece_index)}_{destruct_label(destruct_index)}_{lod_label(lod_index)}"
+def lod_node_name(piece_index: int, destruct_index: int, lod_index: int, part_letter: str = "") -> str:
+    return f"{piece_label(piece_index)}{part_letter}_{destruct_label(destruct_index)}_{lod_label(lod_index)}"
 
 
 def collision_node_name(piece_index: int, destruct_index: int) -> str:
@@ -110,6 +110,14 @@ LINE_TYPE_TECH_NAMES = {
 # extraction._extract_line_features).
 HARD_COLLISION_LINE_TYPES = ("OUTLINE", "HARD")
 
+# Confirmed from every real LINE node in Input/examples/raw_data/: outline/hard, the two gate
+# hard types and region zones all have vertices[0] == vertices[-1], while ground_ad and the
+# pipes never do. BOB rejects an unclosed one outright ("which means it's not a closed
+# outline") and has been seen to hang on it, so these are closed on export whether or not the
+# artist marked the curve Cyclic. Kept separate from HARD_COLLISION_LINE_TYPES because that
+# tuple also drives the outlineVV_hard node name, which gate lines must not take.
+CLOSED_LINE_TYPES = HARD_COLLISION_LINE_TYPES + ("GATE_CLOSED_HARD", "GATE_AJAR_HARD")
+
 
 def line_feature_class_rigid_info(line_type: str, variation_index: int) -> str:
     tech = LINE_TYPE_TECH_NAMES[line_type]
@@ -151,12 +159,13 @@ def _common_string_attributes(
     graphics_option: str,
     class_rigid_info: str,
     rigid_object: str = "",
+    part_letter: str = "",
 ) -> list[NodeAttributeString]:
     return [
         NodeAttributeString("metadata_versionNO", METADATA_VERSION),
         NodeAttributeString("rigid_TYPE", "STAND_RIGID"),
         NodeAttributeString("class_TYPE", class_type),
-        NodeAttributeString("piece_INFO", piece_label(piece_index)),
+        NodeAttributeString("piece_INFO", f"{piece_label(piece_index)}{part_letter}"),
         NodeAttributeString("destruct_ID", destruct_label(destruct_index)),
         NodeAttributeString("graphics_OPTION", graphics_option),
         NodeAttributeString("class_rigidINFO", class_rigid_info),
@@ -165,13 +174,13 @@ def _common_string_attributes(
     ]
 
 
-def _common_integer_attributes(info_num: int = 1) -> list[NodeAttributeInteger]:
+def _common_integer_attributes(info_num: int = 1, id_num2: int = 1) -> list[NodeAttributeInteger]:
     return [
         NodeAttributeInteger("metadata_rigidTYPE", 1),
         NodeAttributeInteger("metadata_classTYPE", 1),
         NodeAttributeInteger("metadata_pieceINFO", 1),
         NodeAttributeInteger("metadata_idNUM", 1),
-        NodeAttributeInteger("metadata_idNUM2", 1),
+        NodeAttributeInteger("metadata_idNUM2", id_num2),
         NodeAttributeInteger("metadata_destructID", 1),
         NodeAttributeInteger("metadata_desNUM", 1),
         NodeAttributeInteger("metadata_graphicsOPTION", 1),
@@ -181,11 +190,26 @@ def _common_integer_attributes(info_num: int = 1) -> list[NodeAttributeInteger]:
     ]
 
 
-def lod_attributes(piece_index: int, destruct_index: int, lod_index: int, building_name: str) -> NodeAttributes:
+def lod_attributes(
+    piece_index: int, destruct_index: int, lod_index: int, building_name: str, part_letter: str = ""
+) -> NodeAttributes:
     strings = _common_string_attributes(
-        piece_index, destruct_index, building_name, class_type="DISPLAY", graphics_option="GRAPHICS_HIGH", class_rigid_info=lod_label(lod_index)
+        piece_index,
+        destruct_index,
+        building_name,
+        class_type="DISPLAY",
+        graphics_option="GRAPHICS_HIGH",
+        class_rigid_info=lod_label(lod_index),
+        part_letter=part_letter,
     )
-    return NodeAttributes(strings=strings, integers=_common_integer_attributes(info_num=lod_index))
+    # metadata_idNUM2 distinguishes multiple Display meshes sharing one LOD (piece01a/piece01b
+    # splits a wall into independently-destructible chunks that still use the same LOD ladder).
+    # CONFIRMED only for the two-letter case, from eastern_new_1's real piece01a (idNUM2=2) /
+    # piece01b (idNUM2=3) against piece01's own bare idNUM2=1 everywhere else in the corpus -
+    # UNCONFIRMED beyond that: whether a third letter continues 2,3,4,... and whether numbering
+    # resets per piece both need a real BOB compile to settle.
+    id_num2 = 2 + (ord(part_letter) - ord("a")) if part_letter else 1
+    return NodeAttributes(strings=strings, integers=_common_integer_attributes(info_num=lod_index, id_num2=id_num2))
 
 
 def collision_attributes(piece_index: int, destruct_index: int, building_name: str) -> NodeAttributes:

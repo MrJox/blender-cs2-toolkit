@@ -1,14 +1,21 @@
+import math
+import struct
 from dataclasses import dataclass
+from pathlib import Path
 
 import bpy
 
-from extraction.extract import has_second_uv_layer
+from binary.cs2_reader import read_cs2
+from bob.rules import MASK_SOURCE_SUFFIXES, compiled_mask_name
+from extraction.extract import ExtractionError, has_second_uv_layer
+from naming.naming import CLOSED_LINE_TYPES
 from extraction.animation import has_keyframed_animation
-from materials.material_builder import is_placeholder_image, read_uv2_layer_name
+from materials.material_builder import is_placeholder_image, read_material_def, read_uv2_layer_name
 from binary.bone_table import ROOT_BONE_TYPE
 from materials.shader_types import (
     DECAL_SHADER_TYPES,
     SHADER_TYPE_LABELS,
+    SKIN_SHADER_TYPES,
     UV2_TEXTURE_SLOT_BY_SHADER_TYPE,
     VEGETATION_SHADER_TYPES,
     WEIGHTED_SHADER_TYPES,
@@ -22,14 +29,17 @@ from props.properties import (
     NESTED_DISPLAY_ROLES,
     NO_BONE_TYPE,
 )
+from extraction.skeleton_extract import extract_skeleton_from_armature
 from extraction.unit_extract import (
     armature_of,
     attachment_point_objects,
     find_unit_armature,
     mesh_objects,
+    skeleton_name_for,
     unit_kind,
     unit_model_collections,
 )
+from importer.skeleton_lookup import RAW_DATA_SKELETONS
 from extraction.vegetation_extract import vegetation_display_collections, vegetation_mesh_objects
 from scene_model.unit_models import MAX_BONE_INFLUENCES, WEIGHTED_KIND
 
@@ -210,8 +220,59 @@ def _validate_display_object(obj: bpy.types.Object) -> list[ValidationIssue]:
                         obj.name,
                     )
                 )
+    for material in _object_materials(obj):
+        issues.extend(_validate_tint_masks(material, obj.name))
     issues.extend(_validate_uv2_channel(obj))
     return issues
+
+
+# BOB writes the faction mask only when t_mask1/2/3 are all non-empty, names it from t_mask1 alone,
+# and the texture build that makes that .dds fails without all three <base>_maskN.tga files. A skin
+# shader refuses the mesh outright instead ("is missing texture 't_mask2'"); an all-empty one is
+# filled with test_black.tga on export (materials/template.py), so only a partial set reaches BOB.
+def _validate_tint_masks(material: bpy.types.Material, object_name: str) -> list[ValidationIssue]:
+    paths = read_material_def(material).tint_mask_texture_paths
+    if not any(paths):
+        return []
+    empty = [f"Tint Mask {index}" for index, path in enumerate(paths, 1) if not path]
+    if empty and getattr(material, "tw_shader_type", "default") in SKIN_SHADER_TYPES:
+        return [
+            ValidationIssue(
+                "WARNING",
+                f"'{material.name}' leaves {', '.join(empty)} empty. A skin material reads all three as its "
+                "rim, subsurface and backscatter masks, and BOB refuses the mesh unless every one is filled "
+                "('is missing texture t_mask...'). Assign an image to every slot, or clear all three to "
+                "export the Assembly Kit's test_black.tga in each, as CA's own skin models do.",
+                object_name,
+            )
+        ]
+    if empty:
+        return [
+            ValidationIssue(
+                "WARNING",
+                f"'{material.name}' leaves {', '.join(empty)} empty. BOB only keeps a tint mask when all "
+                "three Tint Mask slots are filled, so the compiled model will have no tint mask at all. "
+                "Assign an image to every slot - an all-black one turns that tint off.",
+                object_name,
+            )
+        ]
+    stems = [Path(path).stem for path in paths]
+    if all(stem.lower() == "test_black" for stem in stems):
+        return []
+    base = stems[0][: -len(MASK_SOURCE_SUFFIXES[0])]
+    expected = [base + suffix for suffix in MASK_SOURCE_SUFFIXES]
+    if not base or [stem.lower() for stem in stems] != [name.lower() for name in expected]:
+        return [
+            ValidationIssue(
+                "WARNING",
+                f"'{material.name}' has tint masks named {', '.join(stems)}. The compiled model will look "
+                f"for '{compiled_mask_name(stems[0])}.dds', and BOB only builds a mask texture from three "
+                "files named <name>_mask1.tga, <name>_mask2.tga and <name>_mask3.tga that share one "
+                "<name>. Rename them to match, or the game will find no tint mask.",
+                object_name,
+            )
+        ]
+    return []
 
 
 def _validate_animated_mesh_object(obj: bpy.types.Object) -> list[ValidationIssue]:
@@ -395,12 +456,18 @@ def validate_building(building_collection: bpy.types.Collection) -> list[Validat
                 issues.extend(_validate_display_object(obj))
 
             for collection in _lod_collections(display_collections[0]):
+                # The plain Display collection may legitimately hold more than one mesh per LOD
+                # Level - a piece split into independently-destructible chunks that share one LOD
+                # ladder (real samples' piece01a/piece01b) - confirmed against eastern_new_1. A
+                # gate/boiling-oil sub-collection has no such precedent, so it keeps the strict
+                # one-mesh-per-LOD rule.
+                allow_shared_lod = collection is display_collections[0]
                 lod_indices_seen: dict[str, str] = {}
                 for obj in collection.objects:
                     if obj.type != "MESH":
                         continue
                     existing = lod_indices_seen.get(obj.tw_lod_index)
-                    if existing is not None:
+                    if existing is not None and not allow_shared_lod:
                         issues.append(
                             ValidationIssue(
                                 "ERROR",
@@ -570,16 +637,15 @@ def _validate_line_object(obj: bpy.types.Object) -> list[ValidationIssue]:
         issues.append(ValidationIssue("ERROR", f"'{obj.name}' must have exactly one spline.", obj.name))
     elif len(obj.data.splines[0].points) < 2 and len(obj.data.splines[0].bezier_points) < 2:
         issues.append(ValidationIssue("ERROR", f"'{obj.name}' needs at least 2 points.", obj.name))
-    # Confirmed against real BOB behaviour: an Outline that isn't a closed loop hung BOB during
-    # tech processing (a boundary-walking algorithm that presumably never finds its way back to a
-    # start point that doesn't exist). extraction/extract.py force-closes it regardless, but this
-    # is surfaced as a WARNING (not an error) since the auto-fix already makes it safe to export.
-    if obj.tw_line_type == "OUTLINE" and obj.type == "CURVE" and obj.data.splines and not obj.data.splines[0].use_cyclic_u:
+    # Confirmed against real BOB behaviour: an open Outline hung BOB during tech processing, and an
+    # open gate hard line was rejected outright with "which means it's not a closed outline".
+    # extraction/extract.py force-closes both regardless, so this is a WARNING, not an error.
+    if obj.tw_line_type in CLOSED_LINE_TYPES and obj.type == "CURVE" and obj.data.splines and not obj.data.splines[0].use_cyclic_u:
         issues.append(
             ValidationIssue(
                 "WARNING",
-                f"'{obj.name}' is an Outline but isn't a closed (cyclic) curve. Outlines must be closed "
-                "loops or BOB can hang while processing the building's tech data - it will be closed "
+                f"'{obj.name}' is a {obj.tw_line_type} line but isn't a closed (cyclic) curve. These must "
+                "be closed loops or BOB rejects or hangs on the building's tech data - it will be closed "
                 "automatically on export, but consider marking the curve Cyclic yourself to see the "
                 "real shape while editing.",
                 obj.name,
@@ -854,6 +920,7 @@ def _validate_unit_shader(obj: bpy.types.Object, weighted: bool) -> list[Validat
                     obj.name,
                 )
             )
+        issues.extend(_validate_tint_masks(material, obj.name))
     return issues
 
 
@@ -907,7 +974,79 @@ def _validate_attachment_points(
     return issues
 
 
-def validate_unit(unit_collection: bpy.types.Collection) -> list[ValidationIssue]:
+# BOB compares a weighted asset's embedded skeleton with raw_data/animations/skeletons/<name>.cs2 on
+# each non-root node's local translation only: 2.0 cm compiles, 2.05 cm is refused (PLAN_units.md).
+REFERENCE_SKELETON_TOLERANCE = 0.02
+
+
+def _validate_reference_skeleton(
+    armature_object: bpy.types.Object, assembly_kit_root: str
+) -> list[ValidationIssue]:
+    if not assembly_kit_root:
+        return []
+    skeleton_name = skeleton_name_for(armature_object)
+    reference_path = Path(assembly_kit_root).joinpath(*RAW_DATA_SKELETONS) / f"{skeleton_name}.cs2"
+    if not reference_path.is_file():
+        return []
+    try:
+        reference = read_cs2(reference_path.read_bytes())
+    except (OSError, ValueError, struct.error) as error:
+        return [
+            ValidationIssue(
+                "WARNING",
+                f"Could not read the reference skeleton {reference_path} ({error}), so whether BOB will "
+                f"accept '{armature_object.name}' as '{skeleton_name}' was not checked.",
+                armature_object.name,
+            )
+        ]
+    try:
+        skeleton, _warnings = extract_skeleton_from_armature(armature_object, skeleton_name)
+    except ExtractionError:
+        return []
+
+    bones = {bone.name: bone for bone in skeleton.bones}
+    missing: list[str] = []
+    moved: list[tuple[str, float]] = []
+    for node in reference.scene_root.scene_nodes:
+        bone = bones.get(node.name)
+        if bone is None:
+            missing.append(node.name)
+            continue
+        if node.parent_index == 0:
+            continue
+        distance = math.dist(bone.translation, node.anim.translations[0])
+        if distance > REFERENCE_SKELETON_TOLERANCE:
+            moved.append((node.name, distance))
+
+    if missing:
+        return [
+            ValidationIssue(
+                "ERROR",
+                f"'{armature_object.name}' lacks {len(missing)} bone(s) of the reference skeleton "
+                f"'{skeleton_name}' ({', '.join(missing[:5])}), so BOB will refuse this asset with "
+                "'Miss-matched skeleton reference'. A skeleton rebuilt from a compiled .anim holds only "
+                f"the game bones - import {reference_path} instead and bind the asset to it.",
+                armature_object.name,
+            )
+        ]
+    if not moved:
+        return []
+    listed = ", ".join(f"{name} {distance * 100:.1f} cm" for name, distance in moved[:5])
+    return [
+        ValidationIssue(
+            "ERROR",
+            f"{len(moved)} bone(s) of '{armature_object.name}' sit more than "
+            f"{REFERENCE_SKELETON_TOLERANCE * 100:.0f} cm from where the reference skeleton "
+            f"'{skeleton_name}' puts them relative to their parent ({listed}), so BOB will refuse "
+            "this asset with 'Miss-matched skeleton reference'. The rest pose has to match the "
+            "reference: moving or scaling bones in Edit Mode, or applying scale to the Armature, "
+            f"changes it. Re-import {reference_path} and bind the asset to that.",
+            armature_object.name,
+        )
+    ]
+
+
+def validate_unit(unit_collection: bpy.types.Collection, assembly_kit_root: str = "") -> list[ValidationIssue]:
     issues: list[ValidationIssue] = _validate_export_name(unit_collection.name)
     model_collections = unit_model_collections(unit_collection)
     if not model_collections:
@@ -965,6 +1104,7 @@ def validate_unit(unit_collection: bpy.types.Collection) -> list[ValidationIssue
                     armature_object.name,
                 )
             )
+        issues.extend(_validate_reference_skeleton(armature_object, assembly_kit_root))
 
     issues.extend(_validate_attachment_points(unit_collection, weighted, armature_object))
     return issues

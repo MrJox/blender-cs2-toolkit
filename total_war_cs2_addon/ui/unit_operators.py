@@ -758,7 +758,7 @@ class TW_OT_validate_unit(bpy.types.Operator):
             self.report({"ERROR"}, "Select something inside a Unit Asset collection first.")
             return {"CANCELLED"}
         try:
-            issues = validate_unit(unit)
+            issues = validate_unit(unit, get_assembly_kit_root(context))
         except Exception as error:  # noqa: BLE001
             self.report({"ERROR"}, f"Validation could not complete: {error}")
             return {"CANCELLED"}

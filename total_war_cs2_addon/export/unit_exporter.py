@@ -88,7 +88,7 @@ def export_unit(
     rules_settings: UnitRules | None = UnitRules(),
     overwrite_rules: bool = False,
 ) -> UnitExportResult:
-    issues = validate_unit(unit_collection)
+    issues = validate_unit(unit_collection, assembly_kit_root)
     if has_blocking_issues(issues):
         blocking = [issue.message for issue in issues if issue.severity == "ERROR"]
         return UnitExportResult(

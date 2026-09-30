@@ -28,6 +28,8 @@ from ui import (
     operators,
     panels,
     rules_options,
+    texture_operators,
+    texture_panels,
     unit_operators,
     unit_panels,
     vegetation_operators,
@@ -54,10 +56,12 @@ def register() -> None:
     unit_operators.register()
     animation_operators.register()
     vegetation_operators.register()
+    texture_operators.register()
     panels.register()
     unit_panels.register()
     animation_panels.register()
     vegetation_panels.register()
+    texture_panels.register()
     if _follow_preview_light not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(_follow_preview_light)
 
@@ -65,11 +69,13 @@ def register() -> None:
 def unregister() -> None:
     if _follow_preview_light in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_follow_preview_light)
+    texture_panels.unregister()
     vegetation_panels.unregister()
     vegetation_operators.unregister()
     animation_panels.unregister()
     unit_panels.unregister()
     panels.unregister()
+    texture_operators.unregister()
     animation_operators.unregister()
     unit_operators.unregister()
     operators.unregister()

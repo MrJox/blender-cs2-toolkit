@@ -30,6 +30,11 @@ There is one plan file per workflow, all at the repo root next to this file:
   only so far — the compiled formats are validated against 315 real game files, but no vegetation
   `.CS2` exists anywhere to check the authoring side against, so everything about export is
   explicitly unconfirmed and gated on a first BOB run.
+- `PLAN_textures.md` — the texture workflow (raw `.tga` channels ↔ compiled `.dds`, both
+  directions). Cross-workflow rather than per-asset-type: it governs buildings, units and
+  vegetation alike. Research and design only so far — the working→raw mapping is measured against
+  real matched pairs, but the raw→working half is gated on a first probe of BOB's `Texture`
+  processor.
 
 Read whichever one governs the area you're touching (all of them, if the session spans several
 workflows) fully before touching code. If a plan file is ever missing or looks stale, say so and

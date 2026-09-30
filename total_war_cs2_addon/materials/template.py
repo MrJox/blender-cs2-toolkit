@@ -3,6 +3,7 @@ from materials.shader_types import (
     DECAL_DIRTMAP_SHADER_TYPES,
     DECAL_SHADER_TYPES,
     DEFAULT_DECAL_UV_RECT,
+    SKIN_SHADER_TYPES,
     VEGETATION_RIGID_MATERIALS,
     rigid_material_name,
 )
@@ -177,6 +178,12 @@ def build_directx_material_node(
     # Level itself and never reaches this.
     if rigid_material in VEGETATION_RIGID_MATERIALS and not level_texture_path:
         overrides["t_reflectivity"] = gloss_texture_path
+
+    # BOB refuses a skin mesh with any t_mask empty; CA's own skin models point all three at the kit's
+    # test_black.tga where they want no mask, which compiles to skin_mask test_mask.dds.
+    if rigid_material in SKIN_SHADER_TYPES and not any(tint_mask_texture_paths):
+        black = _placeholder_path(assembly_kit_root, "test_black.tga")
+        overrides.update({"t_mask1": black, "t_mask2": black, "t_mask3": black})
 
     textures = []
     for slot_name, _ in _PLACEHOLDER_TEXTURE_SLOTS:

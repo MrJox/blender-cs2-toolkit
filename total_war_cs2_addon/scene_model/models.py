@@ -64,6 +64,9 @@ class LodMesh:
     lod_index: int
     mesh: MeshData
     materials: list[MaterialDef] = field(default_factory=list)
+    # Set when several Display meshes share one LOD (a piece split into independently-destructible
+    # chunks) - "" for the ordinary one-mesh-per-LOD case, "a"/"b"/... when more than one.
+    part_letter: str = ""
 
     @property
     def material(self) -> MaterialDef:
