@@ -170,6 +170,13 @@ def test_parsed_import() -> None:
                 assert obj.tw_line_type in ("GATE_CLOSED_HARD", "GATE_AJAR_HARD"), (
                     f"gate line '{obj.name}' imported as line type '{obj.tw_line_type}'"
                 )
+            # Compiled lines never repeat their start vertex, so closure has to come from the type.
+            expected_closed = obj.tw_line_type in ("OUTLINE", "HARD", "GATE_CLOSED_HARD", "GATE_AJAR_HARD")
+            assert obj.data.splines[0].use_cyclic_u == expected_closed, (
+                f"'{obj.name}' ({obj.tw_line_type}) imported cyclic="
+                f"{obj.data.splines[0].use_cyclic_u}, expected {expected_closed}"
+            )
+    print("  every compiled outline/hard/gate line imported closed, ground_ad open")
 
 
 def test_authoring() -> None:

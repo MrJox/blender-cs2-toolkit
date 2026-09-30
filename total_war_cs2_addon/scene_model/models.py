@@ -52,6 +52,7 @@ class MaterialDef:
     dirt_uv_offset_u: float = 0.5
     dirt_uv_offset_v: float = 0.5
     alpha_mode: int = -1
+    decal_uv_rect: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0)
     uv2_layer_name: str = ""
     # The three COLOUR_ vec4 params a vegetation mesh carries, in file order and in the file's own
     # gamma space. Empty on every other shader type, which tints through tint_colours instead.
@@ -63,6 +64,9 @@ class LodMesh:
     lod_index: int
     mesh: MeshData
     materials: list[MaterialDef] = field(default_factory=list)
+    # Set when several Display meshes share one LOD (a piece split into independently-destructible
+    # chunks) - "" for the ordinary one-mesh-per-LOD case, "a"/"b"/... when more than one.
+    part_letter: str = ""
 
     @property
     def material(self) -> MaterialDef:

@@ -31,7 +31,7 @@ from scene_model.models import (
 )
 from materials.material_builder import read_material_def
 from extraction.animation import sample_object_animation
-from naming.naming import HARD_COLLISION_LINE_TYPES
+from naming.naming import CLOSED_LINE_TYPES, HARD_COLLISION_LINE_TYPES
 from props.properties import (
     EFLINE_ACTION_LABELS,
     LOD_INDEX_BY_IDENTIFIER,
@@ -234,13 +234,30 @@ def _read_object_materials(obj: bpy.types.Object) -> list[MaterialDef]:
     return materials
 
 
-def _extract_lod(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph) -> LodMesh:
+def _extract_lod(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph, part_letter: str = "") -> LodMesh:
     materials = _read_object_materials(obj)
     if not materials:
         raise ExtractionError(f"'{obj.name}' has no material assigned.")
     mesh = _convert_mesh(obj, depsgraph, uv2_layer_name=_uv2_layer_name(materials))
     lod_index = LOD_INDEX_BY_IDENTIFIER[obj.tw_lod_index]
-    return LodMesh(lod_index=lod_index, mesh=mesh, materials=materials)
+    return LodMesh(lod_index=lod_index, mesh=mesh, materials=materials, part_letter=part_letter)
+
+
+# Distinguishes multiple Display meshes sharing one LOD (a piece split into independently-
+# destructible chunks, e.g. real samples' piece01a/piece01b) - "" when a LOD has only one mesh, so
+# the common case keeps the plain pieceNN_destructNN_lodNN name. Letters are assigned in the
+# Display collection's own object order, per piece01a/piece01b's own creation order in the one real
+# sample this is confirmed against (eastern_new_1).
+def _display_part_letters(objects: list[bpy.types.Object]) -> dict[str, str]:
+    by_lod: dict[str, list[bpy.types.Object]] = {}
+    for obj in objects:
+        by_lod.setdefault(obj.tw_lod_index, []).append(obj)
+    letters: dict[str, str] = {}
+    for group in by_lod.values():
+        if len(group) > 1:
+            for index, obj in enumerate(group):
+                letters[obj.name] = chr(ord("a") + index)
+    return letters
 
 
 def _extract_local_mesh_with_materials(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph) -> tuple[MeshData, list[MaterialDef]]:
@@ -483,13 +500,8 @@ def _extract_line_features(lines_collection: bpy.types.Collection, depsgraph: bp
             continue
         line_type = obj.tw_line_type
         try:
-            # OUTLINE and HARD must be closed loops - confirmed from every real sample checked
-            # (vertices[0] == vertices[-1] always, hard01 included). An open outline was found to
-            # hang BOB during tech processing (a boundary-walking algorithm presumably never finds
-            # its way back to the start), so these are force-closed the same way region zones
-            # already are, rather than relying on the artist remembering to mark the curve Cyclic.
             points, closed = _sample_curve_points(
-                obj, depsgraph, force_closed=(line_type in HARD_COLLISION_LINE_TYPES)
+                obj, depsgraph, force_closed=(line_type in CLOSED_LINE_TYPES)
             )
         except ExtractionError as error:
             warnings.append(f"'{obj.name}' was skipped: {error}")
@@ -754,7 +766,8 @@ def extract_building(
                 )
                 continue
 
-            lod_meshes = [_extract_lod(obj, depsgraph) for obj in lod_objects]
+            part_letters = _display_part_letters(lod_objects)
+            lod_meshes = [_extract_lod(obj, depsgraph, part_letters.get(obj.name, "")) for obj in lod_objects]
 
             collision_collections = _children_with_role(destruct_collection, "COLLISION")
             collision_mesh = None

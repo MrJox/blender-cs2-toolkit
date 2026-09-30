@@ -13,6 +13,7 @@ SKELETON_CONFIGURATION_NAME = "blender_skeleton"
 UNIT_CONFIGURATION_NAME = "blender_unit"
 ANIMATION_CONFIGURATION_NAME = "blender_animation"
 VEGETATION_CONFIGURATION_NAME = "blender_vegetation"
+TEXTURE_CONFIGURATION_NAME = "blender_texture"
 TIMEOUT_SECONDS = 900
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -113,6 +114,32 @@ _CS2_CONFIGURATION_TEMPLATE = """<bob_configuration>
 """
 
 
+# PLAN_textures.md 2.3/4: the Texture processor, measured by a real probe run. Unlike Cs2's one
+# .cs2 per folder, one texture build commonly spans several raw folders at once (a modder selecting
+# textures for more than one model's worth of art), and a second probe confirmed <directories> takes
+# one <directory> entry per folder in a single run rather than being limited to one.
+_TEXTURE_CONFIGURATION_TEMPLATE = """<bob_configuration>
+    <processors>
+        <processor>Texture</processor>
+    </processors>
+    <directories>
+{directories}
+    </directories>
+    <global_rules/>
+    <retail>0</retail>
+    <silent>1</silent>
+    <scan_perforce>0</scan_perforce>
+    <merge_for_checkin_mode>3</merge_for_checkin_mode>
+    <keep_output>1</keep_output>
+    <load_asset_graph>0</load_asset_graph>
+    <selected_providers/>
+    <selected_consumers>
+{entries}
+    </selected_consumers>
+</bob_configuration>
+"""
+
+
 class BobError(Exception):
     pass
 
@@ -157,15 +184,21 @@ def write_configuration(
     name: str,
     template: str,
     entries: list[str],
+    directories: list[str] | None = None,
     **fields: str,
 ) -> Path:
     configuration_dir = binaries_dir(assembly_kit_root) / "BOB"
     configuration_path = configuration_dir / f"{name}_configuration.xml"
     escaped = {key: escape(value) for key, value in fields.items()}
     block = "\n".join(f"        <entry>{escape(entry)}</entry>" for entry in entries)
+    # Only the Texture template references {directories} - every other template still gets it as an
+    # unused format() kwarg, which str.format() ignores.
+    directories_block = "\n".join(f"        <directory>{escape(directory)}</directory>" for directory in directories or [])
     try:
         configuration_dir.mkdir(parents=True, exist_ok=True)
-        configuration_path.write_text(template.format(entries=block, **escaped), encoding="utf-8")
+        configuration_path.write_text(
+            template.format(entries=block, directories=directories_block, **escaped), encoding="utf-8"
+        )
     except PermissionError as error:
         raise BobError(
             f"Windows would not let Blender write BOB's settings file:\n{configuration_path}\n"
@@ -337,6 +370,7 @@ def _start(
     success_message: str,
     label: str,
     on_finished: Callable[[BobResult], BobResult] | None = None,
+    directories: list[str] | None = None,
     **configuration_fields: str,
 ) -> BobRun:
     executable = _executable(assembly_kit_root)
@@ -345,6 +379,7 @@ def _start(
         configuration_name,
         template,
         entries,
+        directories=directories,
         **configuration_fields,
     )
     try:
@@ -586,3 +621,42 @@ def start_animation_batch(assembly_kit_root: str, cs2_paths: list[Path]) -> BobR
 
 def compile_animation(assembly_kit_root: str, cs2_path: Path) -> BobResult:
     return start_animation_batch(assembly_kit_root, [cs2_path]).wait()
+
+
+def texture_output_dir(assembly_kit_root: str, target_path: str) -> Path:
+    return Path(assembly_kit_root) / "working_data" / Path(target_path.replace(chr(92), "/"))
+
+
+# Unlike every other build here, a texture compile is not one .CS2 per folder - it is a batch of raw
+# .tga files that can span several folders at once (a modder selecting textures for more than one
+# model's art in one go), each folder having just had its own rules.ensure_texture_rules TargetPath
+# written. target_paths maps each distinct raw folder to that TargetPath so the success message can
+# name every place the run's outputs actually land.
+def start_texture_build(
+    assembly_kit_root: str, raw_paths: list[Path], target_paths: dict[Path, str]
+) -> BobRun:
+    if not raw_paths:
+        raise BobError("There is nothing to build.")
+    entries = [raw_data_logical_path(assembly_kit_root, path) for path in raw_paths]
+    directories = sorted({entry.rsplit("/", 1)[0] + "/" for entry in entries})
+    outputs = "\n".join(
+        str(texture_output_dir(assembly_kit_root, target)) for target in sorted(set(target_paths.values()))
+    )
+    _executable(assembly_kit_root)
+    _ensure_bob_free()
+    return _start(
+        assembly_kit_root,
+        TEXTURE_CONFIGURATION_NAME,
+        _TEXTURE_CONFIGURATION_TEMPLATE,
+        entries,
+        raw_paths,
+        f"BOB compiled {len(raw_paths)} texture file(s) into:\n{outputs}",
+        label=_label("Compiling", "texture", len(raw_paths)),
+        directories=directories,
+    )
+
+
+def compile_textures(
+    assembly_kit_root: str, raw_paths: list[Path], target_paths: dict[Path, str]
+) -> BobResult:
+    return start_texture_build(assembly_kit_root, raw_paths, target_paths).wait()

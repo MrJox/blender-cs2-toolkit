@@ -7,11 +7,12 @@ import mathutils
 
 from binary import rigid_model_v2_structures as rs
 from binary.rigid_model_v2_reader import read_rigid_model_v2
+from bob.rules import mask_source_stems
 from extraction.bone_space import blender_bone_to_engine, blender_object_to_engine
 from extraction.skeleton_extract import extract_skeleton_from_armature
 from extraction.unit_extract import armature_of
-from materials.material_builder import TW_PLACEHOLDER_MARKER, create_total_war_material
-from materials.shader_types import SHADER_TYPE_IDENTIFIERS
+from materials.material_builder import TW_PLACEHOLDER_MARKER, apply_decal_uv_rect, create_total_war_material
+from materials.shader_types import DECAL_SHADER_TYPES, SHADER_TYPE_IDENTIFIERS
 from props.properties import (
     LOD_IDENTIFIER_BY_INDEX,
     get_assembly_kit_root_or_empty,
@@ -27,7 +28,8 @@ from .skeleton_lookup import find_skeleton_source, searched_locations
 # shader never silently becomes a wrong one.
 SHADER_TYPE_BY_FLAGS = {
     rs.SHADER_STANDARD_V5: "default",
-    rs.SHADER_STANDARD_WITH_DECAL_DIRTMAP_V5: "default",
+    rs.SHADER_STANDARD_WITH_DECAL_V5: "decal",
+    rs.SHADER_STANDARD_WITH_DECAL_DIRTMAP_V5: "decal_dirtmap",
     rs.SHADER_STANDARD_TILED_DIRTMAP_V5: "tiled_dirtmap",
     rs.SHADER_WEIGHTED_V5: "weighted",
     rs.SHADER_WEIGHTED_SKIN_V5: "weighted_skin",
@@ -37,6 +39,7 @@ SHADER_TYPE_BY_FLAGS = {
     rs.SHADER_WEIGHTED_WITH_DECAL_DIRTMAP_V5: "weighted_decal_dirtmap",
     rs.SHADER_WEIGHTED_SKIN_DECAL_V5: "weighted_skin_decal",
     rs.SHADER_WEIGHTED_SKIN_DECAL_DIRTMAP_V5: "weighted_skin_decal_dirtmap",
+    rs.SHADER_TERRAIN_BLEND_V5: "terrain_blend",
 }
 
 # rigid_model_v2_structures.TEXTURE_PARAM_NAMES id -> the texture node create_total_war_material
@@ -44,7 +47,6 @@ SHADER_TYPE_BY_FLAGS = {
 TEXTURE_NODE_BY_ID = {
     0: "Diffuse",
     1: "Normal",
-    3: "Mask",
     5: "Ambient Map",
     7: "Dirtmap",
     8: "Dirtmask",
@@ -54,6 +56,13 @@ TEXTURE_NODE_BY_ID = {
     14: "Decal Dirtmask",
     15: "Decal Mask",
 }
+
+# faction_mask and skin_mask are both BOB's pack of t_mask1/2/3, named <base>_mask.dds from
+# <base>_mask1.tga; pointing the three Tint Mask slots back at those sources makes a re-export rebuild
+# the same reference (PLAN_units.md, tint mask section).
+MASK_TEXTURE_IDS = (3, 10)
+
+VEC4_PARAM_UV_RECT = 0
 
 
 # A compiled mesh is not stored in the space this add-on authors in, and the two corrections it
@@ -113,6 +122,18 @@ def _load_texture(path: str, model_path: Path) -> bpy.types.Image | None:
     return image
 
 
+def _assign_tint_masks(material: bpy.types.Material, compiled_path: str, model_path: Path) -> None:
+    compiled = Path(compiled_path.replace("\\", "/"))
+    for index, stem in enumerate(mask_source_stems(compiled.stem), 1):
+        node = material.node_tree.nodes.get(f"Tint Mask {index}")
+        if node is None or node.type != "TEX_IMAGE":
+            continue
+        image = _load_texture(compiled.with_name(f"{stem}.tga").as_posix(), model_path)
+        if TW_PLACEHOLDER_MARKER in image:
+            del image[TW_PLACEHOLDER_MARKER]
+        node.image = image
+
+
 def _material_for(mesh: rs.Mesh, model_path: Path, warnings: list[str]) -> bpy.types.Material:
     header = mesh.material
     base_name = header.name if header is not None and header.name else model_path.stem
@@ -145,6 +166,13 @@ def _material_for(mesh: rs.Mesh, model_path: Path, warnings: list[str]) -> bpy.t
             if TW_PLACEHOLDER_MARKER in image:
                 del image[TW_PLACEHOLDER_MARKER]
             node.image = image
+        for texture in header.textures:
+            if texture.texture_id in MASK_TEXTURE_IDS:
+                _assign_tint_masks(material, texture.path, model_path)
+        if shader_type in DECAL_SHADER_TYPES:
+            for parameter in header.vec4_params:
+                if parameter.param_id == VEC4_PARAM_UV_RECT:
+                    apply_decal_uv_rect(material, parameter.value)
     return material
 
 
@@ -186,6 +214,22 @@ def _build_mesh(
             vertex_index = mesh_data.loops[loop_index].vertex_index
             u, v = mesh.vertices[vertex_index].uv
             uv_layer.data[loop_index].uv = (u, 1.0 - v)
+
+    if any(vertex.colour is not None for vertex in mesh.vertices):
+        # terrain_blend's "Vertex Alpha" node (materials/material_builder.py) reads whichever colour
+        # attribute is the mesh's *render* one via an empty-layer_name ShaderNodeVertexColor, the
+        # same convention extraction/extract.py's export side already relies on - so the imported
+        # attribute has to be marked render/active, not just present, for the preview (and a
+        # re-export) to pick it up. Raw bytes are unsigned 0-255 (unlike the signed normal/tangent
+        # byte triples elsewhere in this reader), so straight /255.0 recovers the artist's 0.0-1.0
+        # float, confirmed against bridge_stone_1 and khazad_fort_wall_small_bridgingcolumn's real
+        # 0/255 values landing exactly on the documented 0.0/1.0 blend extremes.
+        colour_attr = mesh_data.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="POINT")
+        for vertex_index, vertex in enumerate(mesh.vertices):
+            channels = vertex.colour if vertex.colour is not None else (255, 255, 255, 255)
+            colour_attr.data[vertex_index].color = tuple(channel / 255.0 for channel in channels)
+        mesh_data.color_attributes.active_color_name = colour_attr.name
+        mesh_data.color_attributes.render_color_index = len(mesh_data.color_attributes) - 1
 
     if any(math.sqrt(sum(axis * axis for axis in normal)) > 0.01 for normal in normals):
         mesh_data.polygons.foreach_set("use_smooth", [True] * len(mesh_data.polygons))

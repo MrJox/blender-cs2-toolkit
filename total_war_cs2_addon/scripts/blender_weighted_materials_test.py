@@ -19,7 +19,14 @@ WEIGHTED_SHADER_TYPES = (
     "weighted_skin_decal",
     "weighted_skin_decal_dirtmap",
 )
+RIGID_DECAL_SHADER_TYPES = ("decal", "decal_dirtmap")
+DECAL_TYPES = ("weighted_decal", "weighted_decal_dirtmap", "weighted_skin_decal", "weighted_skin_decal_dirtmap",
+               *RIGID_DECAL_SHADER_TYPES)
 BUILDING_SHADER_TYPES = ("default", "tiled_dirtmap", "ship_ambientmap", "terrain_blend")
+SHIELD_CS2 = (r"D:\SteamLibrary\steamapps\common\Total War Attila\assembly_kit\raw_data\VariantMeshes"
+              r"\VariantModels\man\shield\round_curved_shield.CS2")
+BANNER_RMV2 = (REPO_ROOT + r"\Input\examples\working_data\variantmeshes\_variantmodels\gondor\weapons"
+               r"\swan_lance_01.rigid_model_v2")
 
 failures = []
 
@@ -78,7 +85,7 @@ def main() -> None:
 
     print("=== shader type registration ===")
     identifiers = [entry[0] for entry in SHADER_TYPES]
-    for shader_type in WEIGHTED_SHADER_TYPES:
+    for shader_type in WEIGHTED_SHADER_TYPES + RIGID_DECAL_SHADER_TYPES:
         check(f"{shader_type} is a registered shader type", shader_type in identifiers)
         check(f"{shader_type} has a feature set", shader_type in SHADER_FEATURES)
         check(f"{shader_type} is offered to the unit workflow",
@@ -103,6 +110,8 @@ def main() -> None:
         "weighted_decal_dirtmap": 3,
         "weighted_skin_decal": 7,
         "weighted_skin_decal_dirtmap": 7,
+        "decal": 3,
+        "decal_dirtmap": 3,
     }
     for shader_type, index in expected.items():
         check(f"{shader_type} -> technique {index}",
@@ -123,7 +132,7 @@ def main() -> None:
           "Specular Colour" not in skin_inputs)
 
     print("=== built materials ===")
-    for shader_type in WEIGHTED_SHADER_TYPES:
+    for shader_type in WEIGHTED_SHADER_TYPES + RIGID_DECAL_SHADER_TYPES:
         material = build(shader_type)
         labels = node_labels(material)
         fx = material.node_tree.nodes.get("Full_skin") or material.node_tree.nodes.get("Full_standard")
@@ -246,8 +255,7 @@ def main() -> None:
     check("b_do_decal left off for a dirtmap-only shader", integers.get("b_do_decal") == 0)
     check("weighted_dirtmap writes technique 3", node.directx_material.shader_technique_index == 3)
 
-    for shader_type in ("weighted_decal", "weighted_decal_dirtmap", "weighted_skin_decal",
-                        "weighted_skin_decal_dirtmap"):
+    for shader_type in DECAL_TYPES:
         decal_node = build_directx_material_node(
             node_name=shader_type, material_name=shader_type, rigid_material=shader_type,
             assembly_kit_root="D:/kit", decal_texture_paths=("d.dds", "n.dds", "m.dds"),
@@ -333,6 +341,132 @@ def main() -> None:
     written = {a.name: a.value for a in exported.directx_material.float_attributes}
     check("f_uv_offset_u exported", abs(written.get("f_uv_offset_u", 0.0) - 0.25) < 1e-6)
     check("f_uv_offset_v exported", abs(written.get("f_uv_offset_v", 0.0) - 0.75) < 1e-6)
+
+    print("=== decal offset and scale drive vec4_uv_rect ===")
+    from materials.material_builder import DECAL_UV_RECT_NODE, apply_decal_uv_rect
+    from validation.rules import _validate_unit_shader
+
+    for shader_type in DECAL_TYPES:
+        material = build(shader_type)
+        nodes = material.node_tree.nodes
+        rect = nodes.get(DECAL_UV_RECT_NODE)
+        check(f"{shader_type}: has the decal UV rect node", rect is not None and rect.type == "MAPPING")
+        check(f"{shader_type}: the rect inverse-maps like the .fx", rect.vector_type == "TEXTURE")
+        for slot in ("Decal Diffuse", "Decal Normal"):
+            check(f"{shader_type}: {slot} samples through the rect",
+                  linked_from_name(nodes[slot].inputs["Vector"]) == DECAL_UV_RECT_NODE)
+            check(f"{shader_type}: {slot} clamps like its sampler", nodes[slot].extension == "EXTEND")
+        check(f"{shader_type}: Decal Mask samples the plain uv", not nodes["Decal Mask"].inputs["Vector"].is_linked)
+        check(f"{shader_type}: default reads back as the real-sample rect",
+              read_material_def(material).decal_uv_rect == (0.0, 0.0, 1.0, 1.0))
+
+    for shader_type in ("weighted", "weighted_dirtmap", "weighted_skin", "terrain_blend"):
+        check(f"{shader_type}: no decal UV rect node", build(shader_type).node_tree.nodes.get(DECAL_UV_RECT_NODE) is None)
+    check("terrain_blend decal still repeats", build("terrain_blend").node_tree.nodes["Decal Diffuse"].extension == "REPEAT")
+
+    default_export = build_directx_material_node(
+        node_name="d", material_name="d", rigid_material="weighted_decal", assembly_kit_root="D:/kit"
+    )
+    default_vec4 = {a.name: tuple(a.value) for a in default_export.directx_material.vec4_attributes}
+    check("default vec4_uv_rect is still (0,0,1,1)", default_vec4.get("vec4_uv_rect") == (0.0, 0.0, 1.0, 1.0))
+
+    decal = build("weighted_decal")
+    decal.tw_decal_uv_offset = (0.25, 0.125)
+    decal.tw_decal_uv_scale = (0.5, 0.375)
+    rect = decal.node_tree.nodes[DECAL_UV_RECT_NODE]
+    check("offset updates the preview, v measured from the other edge",
+          all(abs(a - b) < 1e-6 for a, b in zip(rect.inputs["Location"].default_value, (0.25, 0.5, 0.0))))
+    check("scale updates the preview",
+          all(abs(a - b) < 1e-6 for a, b in zip(rect.inputs["Scale"].default_value, (0.5, 0.375, 1.0))))
+    definition = read_material_def(decal)
+    check("rect read back as (offset, offset + scale)",
+          all(abs(a - b) < 1e-6 for a, b in zip(definition.decal_uv_rect, (0.25, 0.125, 0.75, 0.5))))
+    exported = build_directx_material_node(
+        node_name="decal", material_name="decal", rigid_material="weighted_decal",
+        assembly_kit_root="D:/kit", decal_uv_rect=definition.decal_uv_rect,
+    )
+    written = {a.name: tuple(a.value) for a in exported.directx_material.vec4_attributes}
+    check("vec4_uv_rect exported",
+          all(abs(a - b) < 1e-6 for a, b in zip(written["vec4_uv_rect"], (0.25, 0.125, 0.75, 0.5))))
+
+    create_total_war_material(decal)
+    check("rebuilding the graph keeps the offset and scale",
+          all(abs(a - b) < 1e-6 for a, b in zip(
+              decal.node_tree.nodes[DECAL_UV_RECT_NODE].inputs["Location"].default_value, (0.25, 0.5, 0.0))))
+
+    decal.tw_shader_type = "weighted_dirtmap"
+    check("a non-decal shader ignores leftover decal settings",
+          read_material_def(decal).decal_uv_rect == (0.0, 0.0, 1.0, 1.0))
+
+    imported = build("weighted_skin_decal")
+    apply_decal_uv_rect(imported, (0.5, 0.25, 1.0, 0.75))
+    check("importing a rect sets offset", tuple(imported.tw_decal_uv_offset) == (0.5, 0.25))
+    check("importing a rect sets scale", tuple(imported.tw_decal_uv_scale) == (0.5, 0.5))
+    check("an imported rect round-trips",
+          read_material_def(imported).decal_uv_rect == (0.5, 0.25, 1.0, 0.75))
+
+    probe_mesh = bpy.data.meshes.new("decal probe")
+    probe_object = bpy.data.objects.new("decal probe", probe_mesh)
+    bpy.context.scene.collection.objects.link(probe_object)
+    zero = build("weighted_decal")
+    zero.tw_decal_uv_scale = (1.0, 0.0)
+    probe_mesh.materials.append(zero)
+    check("a zero decal scale is a validation error",
+          any(issue.severity == "ERROR" and "Decal Scale" in issue.message
+              for issue in _validate_unit_shader(probe_object, True)))
+    zero.tw_decal_uv_scale = (1.0, 1.0)
+    check("a non-zero decal scale passes",
+          not any("Decal Scale" in issue.message for issue in _validate_unit_shader(probe_object, True)))
+
+    print("=== rigid decal shaders serve static meshes ===")
+    for shader_type in RIGID_DECAL_SHADER_TYPES:
+        rigid_material = build(shader_type)
+        probe_mesh.materials.clear()
+        probe_mesh.materials.append(rigid_material)
+        check(f"{shader_type}: accepted on a rigid model",
+              not any(issue.severity == "ERROR" for issue in _validate_unit_shader(probe_object, False)
+                      if "Rigid Model" in issue.message))
+        check(f"{shader_type}: refused on a weighted model",
+              any("Weighted Model" in issue.message for issue in _validate_unit_shader(probe_object, True)))
+    rigid_decal = build_directx_material_node(
+        node_name="shield", material_name="shield", rigid_material="decal_dirtmap", assembly_kit_root="D:/kit"
+    )
+    rigid_integers = {a.name: a.value for a in rigid_decal.directx_material.integer_attributes}
+    check("decal_dirtmap writes what CA's shields carry: decal, dirt and random tile all on",
+          [rigid_integers.get(name) for name in ("b_do_decal", "b_do_dirt", "i_random_tile_u", "i_random_tile_v")]
+          == [1, 1, 1, 1])
+
+    from importer.rigid_model_v2_importer import SHADER_TYPE_BY_FLAGS
+    check("compiled shader 71 imports as decal", SHADER_TYPE_BY_FLAGS.get(71) == "decal")
+    check("compiled shader 72 imports as decal_dirtmap", SHADER_TYPE_BY_FLAGS.get(72) == "decal_dirtmap")
+
+    import os
+    from pathlib import Path
+
+    from binary.rigid_model_v2_reader import read_rigid_model_v2
+    from importer.rigid_model_v2_importer import _material_for
+
+    banner = read_rigid_model_v2(Path(BANNER_RMV2).read_bytes())
+    banner_mesh = next(mesh for lod in banner.lods for mesh in lod.meshes if mesh.shader_flags == 72)
+    banner_material = _material_for(banner_mesh, Path(BANNER_RMV2), [])
+    check("swan_lance_01's banner imports as decal_dirtmap", banner_material.tw_shader_type == "decal_dirtmap")
+    check("its compiled UV_RECT comes back as the rect",
+          read_material_def(banner_material).decal_uv_rect == (0.0, 0.0, 1.0, 1.0))
+
+    if os.path.exists(SHIELD_CS2):
+        from importer import import_cs2
+
+        import_cs2(SHIELD_CS2, bpy.context)
+        shield = bpy.data.materials.get("round curved")
+        check("CA's round_curved_shield imports as decal_dirtmap",
+              shield is not None and shield.tw_shader_type == "decal_dirtmap")
+        check("its decal offset is the authored rect's corner",
+              all(abs(a - b) < 1e-4 for a, b in zip(shield.tw_decal_uv_offset, (0.0647, 0.0576))))
+        shield_rect = read_material_def(shield).decal_uv_rect
+        check("its authored rect re-exports unchanged",
+              all(abs(a - b) < 1e-4 for a, b in zip(shield_rect, (0.0647, 0.0576, 0.5991, 0.5899))))
+    else:
+        print("  SKIP round_curved_shield.CS2 not found")
 
     print("=== light sync reaches both lighting groups ===")
     light_data = bpy.data.lights.new("probe sun", type="SUN")

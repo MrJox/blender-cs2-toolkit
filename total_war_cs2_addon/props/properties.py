@@ -194,6 +194,12 @@ TW_WORKFLOW_ITEMS = [
         "Author battlefield trees, shrubs and stones - their LOD meshes and the two vegetation "
         "materials, exported as a .CS2 for BOB to build",
     ),
+    (
+        "TEXTURE",
+        "Texture",
+        "Convert textures between raw_data's editable .tga channels and working_data's compiled "
+        ".dds files - no scene collections involved, this works on files on disk",
+    ),
 ]
 
 # Which of the two export shapes a unit part takes. Deliberately an explicit choice rather than
@@ -394,6 +400,11 @@ LINE_TYPE_BY_BUILDING_DATA_TYPE = {
 BUILDING_DATA_TYPE_2DCOLLISION_HARD = 5
 BUILDING_DATA_TYPE_2DCOLLISION_GATE = 19
 
+# BOB drops a closed loop's repeated start vertex when it compiles, so a closed line in a
+# .cs2.parsed never comes back to its own start and closure can only be read off the type:
+# every real authored outline/hard and gate hard line is closed, every ground_ad and pipe open.
+CLOSED_LINE_BUILDING_DATA_TYPES = (BUILDING_DATA_TYPE_2DCOLLISION_HARD, BUILDING_DATA_TYPE_2DCOLLISION_GATE)
+
 COLLISION_TYPE_LABELS = {identifier: label for identifier, label, _description in COLLISION_TYPE_ITEMS}
 
 GATE_COLLISION_TYPES = ("GATE_CLOSED", "GATE_AJAR")
@@ -592,6 +603,28 @@ def _damage_parent_poll(collection: bpy.types.Collection, candidate: bpy.types.C
     return candidate.tw_role == "PIECE" and candidate is not collection
 
 
+# These dropdowns classify an object ("this is a Soft Collision", "this line is a Ladder") rather
+# than naming something unique to it, so setting one while several objects are selected is meant to
+# set it on all of them - matching the batch-edit behaviour artists expect from a "type" field.
+# Recursion-safe: once every selected object holds `value`, the inner setattr calls are no-ops, so
+# the update chain terminates on its own rather than looping.
+def _apply_to_selection(prop_name: str):
+    def update(self, context: bpy.types.Context) -> None:
+        value = getattr(self, prop_name)
+        for obj in context.selected_objects or ():
+            if obj is not self and getattr(obj, prop_name, None) != value:
+                setattr(obj, prop_name, value)
+
+    return update
+
+
+def _sync_decal_uv(material: bpy.types.Material, _context: bpy.types.Context) -> None:
+    # materials.fx_nodegroup imports this module, so the builder cannot be imported at load time.
+    from materials.material_builder import sync_decal_uv
+
+    sync_decal_uv(material)
+
+
 def register() -> None:
     try:
         bpy.utils.register_class(TWBuildingsPreferences)
@@ -630,6 +663,7 @@ def register() -> None:
             "drawn at the closest distance, rather than having its levels shuffle up"
         ),
         default="LOD01",
+        update=_apply_to_selection("tw_vegetation_lod"),
     )
 
     bpy.types.Collection.tw_damage_parent = bpy.props.PointerProperty(
@@ -644,6 +678,7 @@ def register() -> None:
         name="Collision Type",
         description="What this collision mesh represents - hover an option below for details",
         default="COLLISION",
+        update=_apply_to_selection("tw_collision_type"),
     )
 
     bpy.types.Object.tw_platform_type = bpy.props.EnumProperty(
@@ -651,6 +686,7 @@ def register() -> None:
         name="Platform Type",
         description="What this platform mesh represents - hover an option below for details",
         default="PLATFORM",
+        update=_apply_to_selection("tw_platform_type"),
     )
 
     bpy.types.Object.tw_lod_index = bpy.props.EnumProperty(
@@ -662,6 +698,7 @@ def register() -> None:
             "the distance its own level implies, so you get a shorter chain rather than a gap"
         ),
         default="LOD01",
+        update=_apply_to_selection("tw_lod_index"),
     )
 
     bpy.types.Object.tw_file_reference_name = bpy.props.StringProperty(
@@ -689,6 +726,7 @@ def register() -> None:
         name="Line Type",
         description="What this curve marks out - hover an option below for details",
         default="OUTLINE",
+        update=_apply_to_selection("tw_line_type"),
     )
 
     bpy.types.Object.tw_efline_action = bpy.props.EnumProperty(
@@ -696,6 +734,7 @@ def register() -> None:
         name="EFLine Action",
         description="What the units standing on this line are doing there - hover an option below for details",
         default="LOW_WALL",
+        update=_apply_to_selection("tw_efline_action"),
     )
 
     bpy.types.Object.tw_gate_anim_kind = bpy.props.EnumProperty(
@@ -703,6 +742,7 @@ def register() -> None:
         name="Gate Animation Kind",
         description="Which of the gate's four animations this object's keyframes belong to",
         default="GATE_OPENING",
+        update=_apply_to_selection("tw_gate_anim_kind"),
     )
 
     bpy.types.Scene.tw_workflow = bpy.props.EnumProperty(
@@ -820,10 +860,34 @@ def register() -> None:
         default=DEFAULT_SHADER_TYPE,
     )
 
+    bpy.types.Material.tw_decal_uv_offset = bpy.props.FloatVectorProperty(
+        name="Decal Offset",
+        description="Where the decal's rectangle starts on the UV map. Measured from the top-left corner of the UV square, "
+        "exactly as the 3ds Max shader's Decal uv rect is, so the same numbers give the same result",
+        size=2,
+        default=(0.0, 0.0),
+        step=1,
+        precision=4,
+        update=_sync_decal_uv,
+    )
+
+    bpy.types.Material.tw_decal_uv_scale = bpy.props.FloatVectorProperty(
+        name="Decal Scale",
+        description="How much of the UV square the decal's rectangle covers. 1 spreads the decal over the whole UV map, "
+        "0.5 over half of it. Must not be 0",
+        size=2,
+        default=(1.0, 1.0),
+        step=1,
+        precision=4,
+        update=_sync_decal_uv,
+    )
+
 
 def unregister() -> None:
     del bpy.types.Action.tw_frame_rate
     del bpy.types.Action.tw_skeleton_name
+    del bpy.types.Material.tw_decal_uv_scale
+    del bpy.types.Material.tw_decal_uv_offset
     del bpy.types.Material.tw_shader_type
     del bpy.types.Material.tw_alpha_mode
     del bpy.types.Bone.tw_is_limb

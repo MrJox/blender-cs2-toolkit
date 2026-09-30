@@ -18,6 +18,18 @@ SHADER_TYPES = [
         "An untextured surface the battlefield ground is projected onto in game, so the mesh takes on "
         "whatever terrain it sits in",
     ),
+    (
+        "decal",
+        "Decal",
+        "Rigid surface with a decal set blended over part of it - shield patterns and insignia on "
+        "weapons and props that have no skeleton",
+    ),
+    (
+        "decal_dirtmap",
+        "Decal Dirtmap",
+        "Rigid surface carrying both the decal set and the dirtmap grime pass - what the game's own "
+        "shields are authored with",
+    ),
     ("weighted", "Weighted", "Skinned surface, lit exactly like Standard - armour, cloth, equipment"),
     (
         "weighted_dirtmap",
@@ -83,6 +95,8 @@ SHADER_TYPE_WORKFLOWS = {
     "tiled_dirtmap": frozenset({"BUILDING"}),
     "ship_ambientmap": frozenset({"BUILDING"}),
     "terrain_blend": frozenset({"BUILDING"}),
+    "decal": frozenset({"UNIT"}),
+    "decal_dirtmap": frozenset({"UNIT"}),
     "weighted": frozenset({"UNIT"}),
     "weighted_dirtmap": frozenset({"UNIT"}),
     "weighted_skin": frozenset({"UNIT"}),
@@ -139,6 +153,7 @@ WEIGHTED_SHADER_TYPES = frozenset(
 # ps30_full_dirtmap's own inline blend against different samplers on a different UV channel.
 DECAL_DIRTMAP_SHADER_TYPES = frozenset(
     {
+        "decal_dirtmap",
         "weighted_dirtmap",
         "weighted_skin_dirtmap",
         "weighted_decal_dirtmap",
@@ -150,12 +165,17 @@ DECAL_DIRTMAP_SHADER_TYPES = frozenset(
 # ps30_main_custom_terrain calls the same function unconditionally, without consulting the flag.
 DECAL_SHADER_TYPES = frozenset(
     {
+        "decal",
+        "decal_dirtmap",
         "weighted_decal",
         "weighted_decal_dirtmap",
         "weighted_skin_decal",
         "weighted_skin_decal_dirtmap",
     }
 )
+
+# vec4_uv_rect's .fx default and the only value any real sample carries.
+DEFAULT_DECAL_UV_RECT = (0.0, 0.0, 1.0, 1.0)
 
 # ps_common_blend_dirtmap offsets its dirt sample by
 # float2(f_uv_offset_u, f_uv_offset_v) * float2(i_random_tile_u, i_random_tile_v), so the

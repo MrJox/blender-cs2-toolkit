@@ -198,6 +198,70 @@ def case_scaled_flag() -> None:
     assert not any("the scale is dropped" in m for m in messages(building))
 
 
+def case_tint_masks() -> None:
+    case_valid_minimal()
+    building = [c for c in bpy.data.collections if c.tw_role == "BUILDING"][-1]
+    material = next(o for o in bpy.data.objects if o.active_material is not None).active_material
+    nodes = material.node_tree.nodes
+
+    def assign(*names: str) -> list[str]:
+        for index, name in enumerate(names, 1):
+            image = bpy.data.images.new(f"tint_{index}_{name or 'none'}", 4, 4)
+            image.filepath = rf"C:\masks\{name}.tga"
+            nodes.get(f"Tint Mask {index}").image = image if name else None
+        return [m for m in messages(building) if "tint mask" in m.lower()]
+
+    assert assign("", "", "") == []
+    partial = assign("wall_mask1", "", "")
+    print("partial:", partial)
+    assert len(partial) == 1 and "Tint Mask 2, Tint Mask 3 empty" in partial[0]
+    assert assign("wall_mask1", "wall_mask2", "wall_mask3") == []
+    assert assign("Wall_Mask1", "wall_mask2", "WALL_MASK3") == []
+    arbitrary = assign("wall_red", "wall_green", "wall_blue")
+    print("arbitrary:", arbitrary)
+    assert len(arbitrary) == 1 and "'wall_mask.dds'" in arbitrary[0]
+    assert len(assign("a_mask1", "b_mask2", "a_mask3")) == 1
+    assert len(assign("mask1", "mask2", "mask3")) == 1
+
+
+def case_unit_tint_masks() -> None:
+    from materials.material_builder import create_total_war_material
+    from validation.rules import _validate_unit_shader
+
+    reset_scene()
+    mesh = bpy.data.meshes.new("unit probe")
+    obj = bpy.data.objects.new("unit probe", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+
+    def tint_issues(shader_type: str, weighted: bool, *names: str) -> list[str]:
+        material = bpy.data.materials.new(shader_type)
+        material.tw_shader_type = shader_type
+        create_total_war_material(material)
+        for index, name in enumerate(names, 1):
+            image = bpy.data.images.new(f"{shader_type}_{index}_{name}", 4, 4)
+            image.filepath = rf"C:\masks\{name}.tga"
+            material.node_tree.nodes[f"Tint Mask {index}"].image = image
+        mesh.materials.clear()
+        mesh.materials.append(material)
+        return [i.message for i in _validate_unit_shader(obj, weighted) if "tint mask" in i.message.lower()]
+
+    for shader_type, weighted in (("default", False), ("weighted", True), ("weighted_dirtmap", True)):
+        partial = tint_issues(shader_type, weighted, "armour_mask1")
+        print(f"{shader_type} partial:", partial)
+        assert len(partial) == 1 and "Tint Mask 2, Tint Mask 3 empty" in partial[0]
+        assert tint_issues(shader_type, weighted, "armour_mask1", "armour_mask2", "armour_mask3") == []
+        assert len(tint_issues(shader_type, weighted, "armour_red", "armour_green", "armour_blue")) == 1
+    for shader_type in ("weighted_skin", "weighted_skin_dirtmap"):
+        assert tint_issues(shader_type, True) == []
+        partial = tint_issues(shader_type, True, "head_mask1")
+        print(f"{shader_type} partial:", partial)
+        assert len(partial) == 1 and "refuses the mesh" in partial[0]
+        assert tint_issues(shader_type, True, "head_mask1", "head_mask2", "head_mask3") == []
+        assert tint_issues(shader_type, True, "test_black", "test_black", "test_black") == []
+        assert len(tint_issues(shader_type, True, "head_rim", "head_sss", "head_back")) == 1
+    assert tint_issues("weighted", True) == []
+
+
 def main() -> None:
     module = addon_utils.enable("total_war_cs2_addon", default_set=True, persistent=False)
     if module is None:
@@ -211,6 +275,8 @@ def main() -> None:
     case_valid_minimal()
     case_meshes_in_an_unroled_subcollection()
     case_scaled_flag()
+    case_tint_masks()
+    case_unit_tint_masks()
 
     print("=== VALIDATION TEST PASSED (no crashes) ===")
 

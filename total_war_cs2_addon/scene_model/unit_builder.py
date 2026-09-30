@@ -232,6 +232,7 @@ def build_unit_cs2_document(part: UnitPart, assembly_kit_root: str, output_path:
             dirt_uv_offset_u=material.dirt_uv_offset_u,
             dirt_uv_offset_v=material.dirt_uv_offset_v,
             alpha_mode=material.alpha_mode,
+            decal_uv_rect=material.decal_uv_rect,
         )
         for material in material_order
     ]

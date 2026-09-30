@@ -536,6 +536,101 @@ def compiled_gloss_map_name(source_stem: str) -> str:
     return source_stem.rpartition("_")[0] + GLOSS_MAP_SUFFIX
 
 
+# The faction mask follows the same rule, taken from t_mask1 alone: "wall_red" came back as
+# wall_mask.dds and "tintone" as _mask.dds (PLAN_buildings.md, tint mask status update).
+MASK_SUFFIX = "_mask"
+MASK_SOURCE_SUFFIXES = ("_mask1", "_mask2", "_mask3")
+
+
+def compiled_mask_name(mask1_stem: str) -> str:
+    return mask1_stem.rpartition("_")[0] + MASK_SUFFIX
+
+
+def mask_source_stems(compiled_stem: str) -> list[str]:
+    base = compiled_stem[: -len(MASK_SUFFIX)] if compiled_stem.lower().endswith(MASK_SUFFIX) else compiled_stem
+    return [base + suffix for suffix in MASK_SOURCE_SUFFIXES]
+
+
+TEXTURE_SECTION = "[+texture]"
+TEXTURE_TARGET_PATH_BUILDING = "RigidModels" + BACKSLASH + "Buildings" + BACKSLASH + "Textures"
+TEXTURE_TARGET_PATH_UNIT = UNIT_TARGET_PATH
+
+
+@dataclass(frozen=True)
+class TextureRules:
+    target_path: str = ""
+
+
+# CA's own rules.bob for a texture folder is exactly this one line - PLAN_textures.md 2.2 measured
+# it byte-for-byte at .../architecture/gondorean/textures/rules.bob. The root rules.bob's thirteen
+# unconditional [Texture] sections (keyed by filename suffix) already cover compression, gamma and
+# normal-map handling for every folder below it; a folder only ever needs to say where the output
+# lands, using the "+" form so it appends to the inherited rule rather than replacing it.
+def texture_rules_text(target_path: str, settings: "TextureRules | None" = None) -> str:
+    settings = settings or TextureRules()
+    return "[+Texture]\r\n" + _line("TargetPath", settings.target_path or target_path)
+
+
+def default_texture_target_path(assembly_kit_root: str, directory: Path) -> str:
+    # Mirrors the two example TargetPaths PLAN_textures.md 2.2 found in the real tree: a building
+    # architecture folder's textures land in RigidModels\Buildings\Textures, a unit part's tex/
+    # folder lands in VariantMeshes\_VariantModels\. Anything not under raw_data\VariantMeshes
+    # defaults to the building path.
+    raw_data = Path(assembly_kit_root) / "raw_data"
+    try:
+        relative = Path(directory).resolve().relative_to(raw_data.resolve())
+    except (ValueError, OSError):
+        return TEXTURE_TARGET_PATH_BUILDING
+    if "variantmeshes" in {part.lower() for part in relative.parts}:
+        return TEXTURE_TARGET_PATH_UNIT
+    return TEXTURE_TARGET_PATH_BUILDING
+
+
+def texture_rule_in_scope(assembly_kit_root: str, directory: Path) -> bool:
+    return _rule_in_scope(assembly_kit_root, Path(directory) / "x.tga", TEXTURE_SECTION)
+
+
+def ensure_texture_rules(
+    assembly_kit_root: str,
+    directory: Path,
+    target_path: str,
+    settings: TextureRules | None = None,
+    overwrite: bool = False,
+) -> Path | None:
+    return _ensure_rules(
+        assembly_kit_root,
+        Path(directory) / "x.tga",
+        TEXTURE_SECTION,
+        texture_rules_text(target_path, settings),
+        _is_customised(settings),
+        overwrite,
+    )
+
+
+# ensure_texture_rules leaves an already-covered folder untouched (same "don't touch a stranger's
+# rules.bob" rule every ensure_* here follows), so a caller that still needs to know where BOB will
+# actually write - to tell the artist, not to change it - reads the cascading TargetPath back out.
+def existing_texture_target_path(assembly_kit_root: str, directory: Path) -> str | None:
+    raw_data = Path(assembly_kit_root) / "raw_data"
+    try:
+        raw_data = raw_data.resolve()
+        directory = Path(directory).resolve()
+        directory.relative_to(raw_data)
+    except (ValueError, OSError):
+        return None
+    for folder in [directory, *directory.parents]:
+        rules_path = folder / RULES_FILENAME
+        if rules_path.is_file():
+            block = _find_block(_read_rules(rules_path), TEXTURE_SECTION)
+            if block is not None:
+                for key, value in _block_entries(block):
+                    if key.lower() == "targetpath":
+                        return value
+        if folder == raw_data:
+            break
+    return None
+
+
 VEGETATION_SECTION = UNIT_SECTION
 VEGETATION_TARGET_PATH = "BattleTerrain" + BACKSLASH + "vegetation" + BACKSLASH + "trees" + BACKSLASH
 VEGETATION_TEXTURE_SUBFOLDER = "textures"

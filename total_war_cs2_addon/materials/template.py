@@ -2,6 +2,8 @@ from materials.shader_types import (
     ALPHA_MODE_VALUES,
     DECAL_DIRTMAP_SHADER_TYPES,
     DECAL_SHADER_TYPES,
+    DEFAULT_DECAL_UV_RECT,
+    SKIN_SHADER_TYPES,
     VEGETATION_RIGID_MATERIALS,
     rigid_material_name,
 )
@@ -92,6 +94,8 @@ _TECHNIQUE_INDEX_BY_RIGID_MATERIAL = {
     # in the file, so 7 is the only candidate (PLAN_units.md §1.2). The four *_decal* variants land
     # on those same two techniques: ps30_main_decaldirt and ps30_full_skin are the only pixel
     # shaders that read b_do_decal at all, and Full_standard's ps30_main_UPDATED has no decal path.
+    # The rigid decal_dirtmap is 3 on CA's own shields (Attila round_curved_shield, Rome II
+    # roman_aux_shield_a); decal has no sample and follows it.
     "weighted_dirtmap": 3,
     "weighted_skin": 7,
     "weighted_skin_dirtmap": 7,
@@ -99,6 +103,8 @@ _TECHNIQUE_INDEX_BY_RIGID_MATERIAL = {
     "weighted_decal_dirtmap": 3,
     "weighted_skin_decal": 7,
     "weighted_skin_decal_dirtmap": 7,
+    "decal": 3,
+    "decal_dirtmap": 3,
     "terrain_blend": 4,
     "ship_ambientmap": 5,
     "tiled_dirtmap": 6,
@@ -141,6 +147,7 @@ def build_directx_material_node(
     dirt_uv_offset_u: float = 0.5,
     dirt_uv_offset_v: float = 0.5,
     alpha_mode: int = ALPHA_MODE_VALUES["NONE"],
+    decal_uv_rect: tuple[float, float, float, float] = DEFAULT_DECAL_UV_RECT,
     vec4_colours: tuple[tuple[float, float, float, float], ...] = (),
 ) -> MaterialNode:
     rigid_material = rigid_material_name(rigid_material)
@@ -171,6 +178,12 @@ def build_directx_material_node(
     # Level itself and never reaches this.
     if rigid_material in VEGETATION_RIGID_MATERIALS and not level_texture_path:
         overrides["t_reflectivity"] = gloss_texture_path
+
+    # BOB refuses a skin mesh with any t_mask empty; CA's own skin models point all three at the kit's
+    # test_black.tga where they want no mask, which compiles to skin_mask test_mask.dds.
+    if rigid_material in SKIN_SHADER_TYPES and not any(tint_mask_texture_paths):
+        black = _placeholder_path(assembly_kit_root, "test_black.tga")
+        overrides.update({"t_mask1": black, "t_mask2": black, "t_mask3": black})
 
     textures = []
     for slot_name, _ in _PLACEHOLDER_TEXTURE_SLOTS:
@@ -214,6 +227,7 @@ def build_directx_material_node(
         f"vec4_colour_{index}": tuple(max(c, 0.0) ** (1.0 / 2.2) for c in colour) + (1.0,)
         for index, colour in enumerate(tint_colours)
     }
+    vec4_overrides["vec4_uv_rect"] = tuple(decal_uv_rect)
     # A vegetation mesh's three COLOUR_ params are shader constants the compiler copies straight
     # through, not tint swatches the shader runs through _linear(), so they bypass the gamma step.
     vec4_overrides.update(
