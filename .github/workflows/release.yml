@@ -18,11 +18,15 @@ jobs:
         run: |
           zip -r "total_war_cs2_addon-${GITHUB_REF_NAME}.zip" total_war_cs2_addon
 
-      - name: Create release
+      - name: Publish release asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "total_war_cs2_addon-${GITHUB_REF_NAME}.zip" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          zip_name="total_war_cs2_addon-${GITHUB_REF_NAME}.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip_name" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip_name" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
