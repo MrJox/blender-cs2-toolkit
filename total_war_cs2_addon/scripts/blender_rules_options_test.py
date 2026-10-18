@@ -18,6 +18,8 @@ def check(label: str, condition: bool) -> None:
 
 bpy.ops.preferences.addon_enable(module=ADDON)
 
+from dataclasses import replace  # noqa: E402
+
 from bob import rules  # noqa: E402
 from export.exporter import export_building  # noqa: E402
 from export.skeleton_exporter import export_skeleton  # noqa: E402
@@ -29,7 +31,8 @@ def property_names(idname: str) -> set[str]:
     return {
         name
         for name in operator.get_rna_type().properties.keys()
-        if name.startswith("rules_") and name not in ("rules_overwrite_confirmed", "rules_show_advanced")
+        if name.startswith("rules_")
+        and name not in ("rules_overwrite_confirmed", "rules_show_advanced", "rules_synced_directory", "rules_scene_animation_type")
     }
 
 
@@ -492,6 +495,148 @@ check("it is off out of the box", preferences.always_overwrite_rules is False)
 preferences.always_overwrite_rules = True
 check("and the export layer reads it", get_always_overwrite_rules(bpy.context) is True)
 preferences.always_overwrite_rules = False
+
+print("=== [+Section] overrides follow BOB's layering ===")
+with tempfile.TemporaryDirectory() as temporary:
+    kit = Path(temporary) / "kit"
+    top = kit / "raw_data" / "variantmeshes" / "pack"
+    child = top / "child"
+    child.mkdir(parents=True)
+    unit_base = "[RigidModelV2]\r\n\tAnimationType = base\r\n\tTargetPath = T\\\r\n"
+
+    def plus(files, animation_type):
+        files_line = f"\t<Files> = {files}\r\n" if files else ""
+        return f"[+RigidModelV2]\r\n{files_line}\tAnimationType = {animation_type}\r\n"
+
+    def resolved(directory, stem=None):
+        state = rules._resolve(str(kit), directory, rules.UnitRules, stem)
+        return None if state is None else state.get("animation_type", (None,))[0]
+
+    (top / rules.RULES_FILENAME).write_bytes(
+        (
+            unit_base
+            + "\r\n" + plus("...alpha.cs2", "exact") + "\r\n" + plus("..._prop.cs2", "suffix")
+            + "\r\n" + plus("...*mid*...", "contains") + "\r\n" + plus(".../*cinematic/...", "dirglob")
+            + "\r\n" + plus("...twice.cs2", "first") + "\r\n" + plus("...twice.cs2", "second")
+            + "\r\n" + plus("...one.cs2, ...two.cs2", "listed") + "\r\n" + plus("bare.cs2", "bare")
+        ).encode("ascii")
+    )
+    check("a file no pattern names gets the folder default", resolved(top, "plain") == "base")
+    check("the folder default ignores file-scoped overrides", resolved(top) == "base")
+    for stem, expected, label in (
+        ("alpha", "exact", "a name"), ("beta_prop", "suffix", "a suffix"), ("has_mid_inside", "contains", "a * inside"),
+        ("twice", "second", "a later block over an earlier one"), ("one", "listed", "a comma list"),
+        ("two", "listed", "its second entry"), ("bare", "bare", "a bare file name"), ("ALPHA", "exact", "another case"),
+    ):
+        check(f"{label} matches", resolved(top, stem) == expected)
+    check("a name no pattern covers is the default", resolved(top, "x") == "base")
+    check("the same name one folder down is not a bare match", resolved(child, "bare") == "base")
+
+    cinematic = top / "sub" / "a_cinematic"
+    cinematic.mkdir(parents=True)
+    check("a directory glob matches a nested folder", resolved(cinematic, "z") == "dirglob")
+    shallow = top / "cinematic"
+    shallow.mkdir()
+    check(".../x does not match a top-level x", resolved(shallow, "z") == "base")
+
+    (child / rules.RULES_FILENAME).write_bytes(plus("...alpha.cs2", "child_exact").encode("ascii"))
+    check("a nearer folder wins the same file", resolved(child, "alpha") == "child_exact")
+    check("a farther override still reaches a file the nearer one does not name", resolved(child, "beta_prop") == "suffix")
+    check("a child with only [+] inherits the farther base", resolved(child, "plain") == "base")
+
+    (child / rules.RULES_FILENAME).write_bytes(plus(None, "generic").encode("ascii"))
+    check("a nearer unconditional override beats a farther file-scoped one", resolved(child, "alpha") == "generic")
+    check("and is part of the folder default", resolved(child) == "generic")
+
+    (child / rules.RULES_FILENAME).write_bytes(b"[RigidModelV2]\r\n\tTargetPath = Other\\\r\n")
+    check("a nearer plain section drops the farther overrides", resolved(child, "alpha") is None)
+    check("and the farther base", rules.load_rules(str(kit), child, rules.UnitRules).animation_type == "")
+    (child / rules.RULES_FILENAME).unlink()
+
+    found = rules.rule_overrides(str(kit), top, rules.UnitRules, ["alpha", "plain", "beta_prop"])
+    check("the overrides name the files they change", {stem for stem, *_ in found} == {"alpha", "beta_prop"})
+    check("and the key, as the file spells it", all(key == "AnimationType" for _, key, _, _ in found))
+    check("an unmatched file has none", not rules.rule_overrides(str(kit), top, rules.UnitRules, ["plain"]))
+
+    print("--- a pre-filled value is not an edit, so it never writes a nearer plain section ---")
+    inherited = rules.load_rules(str(kit), child, rules.UnitRules)
+    check("the pre-filled settings are not customised", not rules._customised(str(kit), child, inherited))
+    check("an edit of them is", rules._customised(str(kit), child, replace(inherited, texture_subfolder="art")))
+    written = rules.ensure_unit_rules(str(kit), child / "x.CS2", [("x", "")], inherited)
+    check("exporting the inherited values writes no copy into the child", written is None and not (child / rules.RULES_FILENAME).exists())
+
+print("=== the dialog is pre-filled from the rules.bob files, walking up the tree ===")
+with tempfile.TemporaryDirectory() as temporary:
+    kit = Path(temporary) / "kit"
+    parent = kit / "raw_data" / "variantmeshes" / "pack"
+    export_dir = parent / "weapons"
+    export_dir.mkdir(parents=True)
+
+    check("no file anywhere declares nothing", rules.load_rules(str(kit), export_dir, rules.UnitRules) is None)
+
+    (parent / rules.RULES_FILENAME).write_bytes(
+        b"[RigidModelV2]\r\n\tTargetPath = Parent\\Path\\\r\n\tAnimationType = parent_skeleton\r\n\tSaveAGF = false\r\n"
+        b"\tTextureSubFolder=ptex\r\n\r\n[+RigidModelV2]\r\n\t<Files> = ...x.cs2\r\n\tAnimationType = override_skeleton\r\n"
+    )
+    loaded = rules.load_rules(str(kit), export_dir, rules.UnitRules)
+    check("a parent's file fills the fields", loaded.animation_type == "parent_skeleton" and loaded.target_path == "Parent\\Path\\")
+    check("a boolean is read as one", loaded.save_agf is False)
+    check("a key written without spaces is read", loaded.texture_subfolder == "ptex")
+    check("a per-file override is not mistaken for the folder default", loaded.animation_type != "override_skeleton")
+    check("a key no file states stays at its default", loaded.texture_folder == rules.UnitRules().texture_folder)
+
+    (export_dir / rules.RULES_FILENAME).write_bytes(
+        b"[RigidModelV2]\r\n\tAnimationType = \r\n\tTextureSubFolder=weap\r\n\tLODDistance1 = 100\r\n\tLODDistance2 = 200\r\n"
+        b"\tLODDistance3 = 400\r\n\tLODDistance4 = 500\r\n"
+    )
+    loaded = rules.load_rules(str(kit), export_dir, rules.UnitRules)
+    check("a nearer plain section replaces the farther one whole, as BOB does", loaded.target_path == rules.UnitRules().target_path)
+    check("and so wins the key it states", loaded.animation_type == "")
+    check("BOB's own ladder reads as an untouched one", loaded.lod_distance_1 is None)
+    check("a file for another section is not this section's", rules.load_rules(str(kit), export_dir, rules.BuildingRules) is None)
+    check("outside raw_data nothing is read", rules.load_rules(str(kit), Path(temporary), rules.UnitRules) is None)
+
+    tree = rules.load_rules(str(kit), export_dir, rules.VegetationRules)
+    check("a tree dialog reads the shared section too", tree is not None and tree.texture_subfolder == "weap")
+
+    print("--- files win over the scene, the scene fills only a folder without any ---")
+    weapon_dialog = OperatorStub(
+        bpy.types.TW_BUILDINGS_OT_export_units, bpy.ops.tw_buildings.export_units.get_rna_type(), []
+    )
+    preferences = bpy.context.preferences.addons[ADDON].preferences
+    real_kit, preferences.assembly_kit_root = preferences.assembly_kit_root, str(kit)
+    weapon_dialog.rules_scene_animation_type = "scene_skeleton"
+    weapon_dialog.directory = str(export_dir)
+    weapon_dialog.sync_rules_to_destination(bpy.context, force=True)
+    check("a folder with a rules.bob shows the file's empty skeleton, not the scene's", weapon_dialog.rules_animation_type == "")
+    check("and its other fields", weapon_dialog.rules_texture_subfolder == "weap")
+
+    empty_dir = kit / "raw_data" / "elsewhere"
+    empty_dir.mkdir()
+    weapon_dialog.directory = str(empty_dir)
+    weapon_dialog.sync_rules_to_destination(bpy.context)
+    check("a folder without one shows the scene's skeleton", weapon_dialog.rules_animation_type == "scene_skeleton")
+    check("and drops the previous folder's values", weapon_dialog.rules_texture_subfolder == rules.UnitRules().texture_subfolder)
+
+    weapon_dialog.rules_animation_type = "typed_by_hand"
+    weapon_dialog.sync_rules_to_destination(bpy.context)
+    check("a redraw in the same folder keeps what the artist typed", weapon_dialog.rules_animation_type == "typed_by_hand")
+
+    print("--- a pre-filled dialog does not ask to overwrite the file it came from ---")
+    weapon_dialog.directory = str(export_dir)
+    weapon_dialog.sync_rules_to_destination(bpy.context)
+    settings = weapon_dialog.rules_settings()
+    check(
+        "unchanged settings raise no conflict",
+        rules.rules_conflict(str(kit), export_dir, rules.UNIT_SECTION, weapon_dialog.rules_base_text(str(kit), export_dir), settings) == [],
+    )
+    weapon_dialog.rules_animation_type = "changed"
+    changed = weapon_dialog.rules_settings()
+    check(
+        "an edited one still does",
+        bool(rules.rules_conflict(str(kit), export_dir, rules.UNIT_SECTION, weapon_dialog.rules_base_text(str(kit), export_dir), changed)),
+    )
+    preferences.assembly_kit_root = real_kit
 
 print("\n" + ("ALL RULES OPTION CHECKS PASSED" if not failures else f"{len(failures)} FAILED: {failures}"))
 if failures:

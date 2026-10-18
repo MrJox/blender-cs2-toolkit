@@ -4,13 +4,18 @@ from pathlib import Path
 import bpy
 
 from bob import rules
-from props.properties import get_always_overwrite_rules
+from props.properties import get_always_overwrite_rules, get_assembly_kit_root
 
 # The export dialog is a file browser, and a file browser cannot host a second modal dialog and wait
 # for its answer. So a conflicting export stashes what it was about to do, asks, and the confirm
 # operator re-dispatches the same export with the answer folded in. One export runs at a time, so
 # one slot is enough.
 _pending: tuple[str, dict] | None = None
+
+# Resolving overrides reads every rules.bob up the tree once per exported file, and the dialog
+# redraws constantly, so the last answer is kept until the folder or the batch changes.
+_override_lines: tuple[tuple, list[str]] | None = None
+MAX_OVERRIDE_LINES = 6
 
 
 def _stash(idname: str, properties: dict) -> None:
@@ -90,6 +95,17 @@ def _optional_flag(value: str) -> bool | None:
     return {"TRUE": True, "FALSE": False}.get(value)
 
 
+def _displayed(rules_path: Path, raw_data: Path) -> str:
+    try:
+        return rules_path.resolve().relative_to(raw_data).as_posix()
+    except (ValueError, OSError):
+        return str(rules_path)
+
+
+def _flag_item(value: bool | None) -> str:
+    return "DEFAULT" if value is None else "TRUE" if value else "FALSE"
+
+
 # BOB writes 100/200/400/500 into the compiled model when the rule names no LODDistance at all, so
 # the boxes show that ladder and the keys stay out of the file until a rung actually moves. All four
 # go in together: a ladder with one rung named and three missing is not a ladder.
@@ -120,7 +136,12 @@ class RulesOptionsMixin:
         default=False,
     )
 
+    rules_synced_directory: bpy.props.StringProperty(default="", options={"HIDDEN"})
+
     def rules_settings(self):
+        raise NotImplementedError
+
+    def rules_values(self, settings) -> dict:
         raise NotImplementedError
 
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
@@ -129,10 +150,88 @@ class RulesOptionsMixin:
     def draw_rules_options(self, layout: bpy.types.UILayout) -> None:
         raise NotImplementedError
 
+    def scene_rules_settings(self):
+        return type(self.rules_settings())()
+
+    def rules_stems(self) -> list[str]:
+        return [target.name for target in self.targets] or [
+            name for name in self.target_names.splitlines() if name
+        ]
+
+    # The fields are the folder's defaults. A <Files>-scoped [+Section] in any rules.bob up the tree
+    # can still replace some of them for a file being exported, and nothing in the fields would say so.
+    def rules_override_lines(self, context: bpy.types.Context) -> list[str]:
+        global _override_lines
+        directory = self.browsed_directory(context)
+        stems = self.rules_stems()
+        if not directory or not stems:
+            return []
+        key = (directory, tuple(stems), type(self).__name__)
+        if _override_lines is not None and _override_lines[0] == key:
+            return _override_lines[1]
+        try:
+            assembly_kit_root = get_assembly_kit_root(context)
+        except Exception:  # noqa: BLE001
+            return []
+        overrides = rules.rule_overrides(
+            assembly_kit_root, Path(bpy.path.abspath(directory)), type(self.rules_settings()), stems
+        )
+        raw_data = (Path(assembly_kit_root) / "raw_data").resolve()
+        lines = [
+            f"{stem}: {key_name} = {raw or '(empty)'}   in {_displayed(rules_path, raw_data)}"
+            for stem, key_name, raw, rules_path in overrides
+        ]
+        if len(lines) > MAX_OVERRIDE_LINES:
+            lines = lines[:MAX_OVERRIDE_LINES] + [f"...and {len(lines) - MAX_OVERRIDE_LINES} more"]
+        _override_lines = (key, lines)
+        return lines
+
+    # The file browser keeps the folder it is showing on its own params until the dialog is
+    # confirmed, so the operator's own `directory` lags behind while the artist navigates.
+    def browsed_directory(self, context: bpy.types.Context) -> str:
+        params = getattr(context.space_data, "params", None)
+        directory = getattr(params, "directory", None)
+        if isinstance(directory, bytes):
+            return directory.decode("utf-8", errors="replace")
+        return directory or self.directory
+
+    # Two sources, never mixed: a folder whose rules.bob files declare this section is pre-filled
+    # from them, and only a folder without any is pre-filled from the scene. The scene's idea of the
+    # skeleton must not paper over what the file BOB will actually read says.
+    def sync_rules_to_destination(self, context: bpy.types.Context, force: bool = False) -> None:
+        directory = self.browsed_directory(context)
+        if directory == self.rules_synced_directory and not force:
+            return
+        self.rules_synced_directory = directory
+        global _override_lines
+        _override_lines = None
+        settings = None
+        if directory:
+            try:
+                assembly_kit_root = get_assembly_kit_root(context)
+            except Exception:  # noqa: BLE001
+                assembly_kit_root = ""
+            if assembly_kit_root:
+                settings = rules.load_rules(
+                    assembly_kit_root, Path(bpy.path.abspath(directory)), type(self.rules_settings())
+                )
+        for name, value in self.rules_values(settings or self.scene_rules_settings()).items():
+            try:
+                setattr(self, name, value)
+            except (TypeError, ValueError):
+                self.property_unset(name)
+
     def rules_box(self, layout: bpy.types.UILayout) -> bpy.types.UILayout:
+        self.sync_rules_to_destination(bpy.context)
         box = layout.box()
         box.enabled = self.compile_with_bob
         box.label(text="rules.bob - what BOB builds this as", icon="TOOL_SETTINGS")
+        lines = self.rules_override_lines(bpy.context)
+        if lines:
+            notice = box.box()
+            notice.label(text="Per-file overrides - these win over the fields below:", icon="INFO")
+            for line in lines:
+                notice.label(text=line)
         return box
 
     def rules_advanced_box(self, box: bpy.types.UILayout) -> bpy.types.UILayout | None:
@@ -272,6 +371,24 @@ class BuildingRulesOptions(RulesOptionsMixin):
             gun_type=self.rules_gun_type,
         )
 
+    def rules_values(self, settings: rules.BuildingRules) -> dict:
+        return {
+            "rules_texture_path": settings.texture_path,
+            "rules_animation_fps": settings.animation_fps,
+            "rules_animation_type": settings.animation_type,
+            "rules_audio_material": settings.audio_material,
+            "rules_capacity": settings.capacity,
+            "rules_category": settings.category,
+            "rules_hit_points": settings.hit_points,
+            "rules_multiple_buildings": settings.multiple_buildings,
+            "rules_incendiary_radius": settings.incendiary_radius,
+            "rules_can_burn": _flag_item(settings.can_burn),
+            "rules_auxiliary": _flag_item(settings.auxiliary),
+            "rules_joiner": _flag_item(settings.joiner),
+            "rules_collision_3d": _flag_item(settings.collision_3d),
+            "rules_gun_type": settings.gun_type,
+        }
+
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
         return rules.building_rules_text(self.rules_settings())
 
@@ -341,6 +458,17 @@ class RigidModelRulesOptions(RulesOptionsMixin):
             "disable_alpha_test": _optional_flag(self.rules_disable_alpha_test),
         }
 
+    def rigid_model_values(self, settings) -> dict:
+        return {
+            "rules_target_filename": settings.target_filename,
+            "rules_target_extension": settings.target_extension,
+            "rules_rigid_category": settings.rigid_category,
+            "rules_update_database": _flag_item(settings.update_database),
+            "rules_single_lod": _flag_item(settings.single_lod),
+            "rules_variable_bones_per_vert": _flag_item(settings.variable_bones_per_vert),
+            "rules_disable_alpha_test": _flag_item(settings.disable_alpha_test),
+        }
+
     def draw_rigid_model_options(self, advanced: bpy.types.UILayout) -> None:
         advanced.prop(self, "rules_target_filename")
         advanced.prop(self, "rules_target_extension")
@@ -365,6 +493,7 @@ class UnitRulesOptions(RigidModelRulesOptions):
         ),
         default=rules.UnitRules.animation_type,
     )
+    rules_scene_animation_type: bpy.props.StringProperty(default="", options={"HIDDEN"})
     rules_target_path: bpy.props.StringProperty(
         name="Target Path",
         description=(
@@ -435,6 +564,29 @@ class UnitRulesOptions(RigidModelRulesOptions):
             **self.rigid_model_settings(),
         )
 
+    def scene_rules_settings(self) -> rules.UnitRules:
+        return rules.UnitRules(animation_type=self.rules_scene_animation_type)
+
+    def rules_values(self, settings: rules.UnitRules) -> dict:
+        ladder = (
+            settings.lod_distance_1,
+            settings.lod_distance_2,
+            settings.lod_distance_3,
+            settings.lod_distance_4,
+        )
+        return {
+            "rules_target_path": settings.target_path,
+            "rules_texture_folder": settings.texture_folder,
+            "rules_texture_subfolder": settings.texture_subfolder,
+            "rules_animation_type": settings.animation_type,
+            "rules_save_agf": settings.save_agf,
+            **{
+                f"rules_lod_distance_{rung}": default if distance is None else distance
+                for rung, (distance, default) in enumerate(zip(ladder, rules.DEFAULT_LOD_DISTANCES), start=1)
+            },
+            **self.rigid_model_values(settings),
+        }
+
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
         return rules.unit_rules_base(self.rules_settings())
 
@@ -459,6 +611,7 @@ class UnitRulesOptions(RigidModelRulesOptions):
 class AnimationRulesOptions(RulesOptionsMixin):
     rules_section = rules.ANIMATION_SECTION
 
+    rules_scene_animation_type: bpy.props.StringProperty(default="", options={"HIDDEN"})
     rules_core_translations: bpy.props.BoolProperty(
         name="Core Translations",
         description=(
@@ -566,6 +719,34 @@ class AnimationRulesOptions(RulesOptionsMixin):
             cinematic_right_hand_rotations=_optional_flag(self.rules_cinematic_right_hand_rotations),
         )
 
+    def rules_stems(self) -> list[str]:
+        return [choice.name for choice in self.clips if choice.export]
+
+    def scene_rules_settings(self) -> rules.AnimationRules:
+        return rules.AnimationRules(animation_type=self.rules_scene_animation_type)
+
+    def rules_values(self, settings: rules.AnimationRules) -> dict:
+        return {
+            "rules_core_translations": settings.core_translations,
+            "rules_face_translations": settings.face_translations,
+            "rules_face_rotations": settings.face_rotations,
+            "rules_left_hand_translations": settings.left_hand_translations,
+            "rules_left_hand_rotations": settings.left_hand_rotations,
+            "rules_right_hand_translations": settings.right_hand_translations,
+            "rules_right_hand_rotations": settings.right_hand_rotations,
+            "rules_ignore_metadata": settings.ignore_metadata,
+            "rules_animation_type": settings.animation_type,
+            "rules_target_path": settings.target_path,
+            "rules_cinematic_animation_type": settings.cinematic_animation_type,
+            "rules_cinematic_core_translations": _flag_item(settings.cinematic_core_translations),
+            "rules_cinematic_face_translations": _flag_item(settings.cinematic_face_translations),
+            "rules_cinematic_face_rotations": _flag_item(settings.cinematic_face_rotations),
+            "rules_cinematic_left_hand_translations": _flag_item(settings.cinematic_left_hand_translations),
+            "rules_cinematic_left_hand_rotations": _flag_item(settings.cinematic_left_hand_rotations),
+            "rules_cinematic_right_hand_translations": _flag_item(settings.cinematic_right_hand_translations),
+            "rules_cinematic_right_hand_rotations": _flag_item(settings.cinematic_right_hand_rotations),
+        }
+
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
         return rules.animation_rules_base(self.rules_settings())
 
@@ -611,6 +792,9 @@ class SkeletonRulesOptions(RulesOptionsMixin):
 
     def rules_settings(self) -> rules.SkeletonRules:
         return rules.SkeletonRules(target_path=self.rules_target_path)
+
+    def rules_values(self, settings: rules.SkeletonRules) -> dict:
+        return {"rules_target_path": settings.target_path}
 
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
         return rules.skeleton_rules_text(self.rules_settings())
@@ -705,6 +889,21 @@ class VegetationRulesOptions(RigidModelRulesOptions):
             texture_subfolder=self.rules_texture_subfolder,
             **self.rigid_model_settings(),
         )
+
+    def rules_values(self, settings: rules.VegetationRules) -> dict:
+        return {
+            "rules_animation_type": settings.animation_type,
+            "rules_create_description_file": settings.create_description_file,
+            "rules_incendiary_radius": settings.incendiary_radius,
+            "rules_lod_distance_1": settings.lod_distance_1,
+            "rules_lod_distance_2": settings.lod_distance_2,
+            "rules_lod_distance_3": settings.lod_distance_3,
+            "rules_lod_distance_4": settings.lod_distance_4,
+            "rules_target_path": settings.target_path,
+            "rules_texture_folder": settings.texture_folder,
+            "rules_texture_subfolder": settings.texture_subfolder,
+            **self.rigid_model_values(settings),
+        }
 
     def rules_base_text(self, assembly_kit_root: str, directory: Path) -> str:
         paths = rules.vegetation_paths_for(assembly_kit_root, directory / "x.CS2")

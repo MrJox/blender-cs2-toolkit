@@ -1,6 +1,6 @@
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 RULES_FILENAME = "rules.bob"
@@ -42,6 +42,15 @@ def _optional(key: str, value, separator: str = " = ") -> str:
 
 def _is_customised(settings) -> bool:
     return settings is not None and settings != type(settings)()
+
+
+# Settings the dialog only pre-filled from rules.bob files already on disk are not a change of the
+# artist's: writing them back would put a plain section in a nearer folder, and a plain section
+# discards every [+Section] override the farther files carry.
+def _customised(assembly_kit_root: str, directory: Path, settings) -> bool:
+    if not _is_customised(settings):
+        return False
+    return settings != load_rules(assembly_kit_root, directory, type(settings))
 
 
 # raw_data/db/battlefield_building_categories.xml - the game's own enum table, all nine rows. BOB's
@@ -351,7 +360,7 @@ def ensure_building_rules(
         cs2_path,
         BUILDING_SECTION,
         building_rules_text(settings),
-        _is_customised(settings),
+        _customised(assembly_kit_root, Path(cs2_path).parent, settings),
         overwrite,
     )
 
@@ -367,7 +376,7 @@ def ensure_skeleton_rules(
         cs2_path,
         SKELETON_SECTION,
         skeleton_rules_text(settings),
-        _is_customised(settings),
+        _customised(assembly_kit_root, Path(cs2_path).parent, settings),
         overwrite,
     )
 
@@ -459,7 +468,7 @@ def ensure_unit_rules(
             # The base section is not what this export asks for - someone else's file, or ours from
             # before the settings changed. Replacing it keeps every [+RigidModelV2] override already
             # there, so the other parts sharing the folder keep their skeletons.
-            if not (_is_customised(settings) and overwrite):
+            if not (_customised(assembly_kit_root, Path(cs2_path).parent, settings) and overwrite):
                 return None
             kept = base + _overrides_of(text)
             rules_path.write_bytes((_update_unit_overrides(kept, parts) or kept).encode("ascii"))
@@ -473,7 +482,8 @@ def ensure_unit_rules(
         rules_path.write_bytes(updated.encode("ascii"))
         return rules_path
 
-    if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION) and not _is_customised(settings):
+    customised = _customised(assembly_kit_root, Path(cs2_path).parent, settings)
+    if _rule_in_scope(assembly_kit_root, cs2_path, UNIT_SECTION) and not customised:
         return None
     rules_path.write_bytes(unit_rules_text(parts, settings).encode("ascii"))
     return rules_path
@@ -683,7 +693,7 @@ def ensure_vegetation_rules(
         cs2_path,
         VEGETATION_SECTION,
         vegetation_rules_text(*paths, settings),
-        _is_customised(settings),
+        _customised(assembly_kit_root, Path(cs2_path).parent, settings),
         overwrite,
     )
 
@@ -742,7 +752,7 @@ def ensure_animation_rules(
     if rules_path.exists():
         text = _read_rules(rules_path)
         if base_section_changes(text, ANIMATION_SECTION, base):
-            if not (_is_customised(settings) and overwrite):
+            if not (_customised(assembly_kit_root, Path(cs2_path).parent, settings) and overwrite):
                 return None
             kept = base + _overrides_of(text)
             rules_path.write_bytes((_update_animation_overrides(kept, clips) or kept).encode("ascii"))
@@ -843,12 +853,211 @@ def base_section_changes(text: str, section: str, base_text: str) -> list[str]:
     return changes
 
 
+def _boolean(value: str) -> bool:
+    lowered = value.lower()
+    if lowered not in ("true", "false"):
+        raise ValueError(value)
+    return lowered == "true"
+
+
+_RIGID_MODEL_KEYS = {
+    "targetfilename": ("target_filename", str),
+    "targetextension": ("target_extension", str),
+    "rigidcategory": ("rigid_category", str),
+    "updatedatabase": ("update_database", _boolean),
+    "singlelod": ("single_lod", _boolean),
+    "variablebonespervert": ("variable_bones_per_vert", _boolean),
+    "disablealphatest": ("disable_alpha_test", _boolean),
+}
+
+_LOD_KEYS = {f"loddistance{rung}": (f"lod_distance_{rung}", int) for rung in range(1, 5)}
+
+_RULE_KEYS = {
+    BuildingRules: (
+        BUILDING_SECTION,
+        {
+            "texturepath": ("texture_path", str),
+            "animationfps": ("animation_fps", int),
+            "animation_type": ("animation_type", str),
+            "audiomaterial": ("audio_material", str),
+            "capacity": ("capacity", int),
+            "category": ("category", str),
+            "hitpoints": ("hit_points", int),
+            "multiplebuildings": ("multiple_buildings", _boolean),
+            "incendiaryradius": ("incendiary_radius", float),
+            "canburn": ("can_burn", _boolean),
+            "auxiliary": ("auxiliary", _boolean),
+            "joiner": ("joiner", _boolean),
+            "collision3d": ("collision_3d", _boolean),
+            "guntype": ("gun_type", str),
+        },
+    ),
+    UnitRules: (
+        UNIT_SECTION,
+        {
+            "targetpath": ("target_path", str),
+            "texturefolder": ("texture_folder", str),
+            "texturesubfolder": ("texture_subfolder", str),
+            "animationtype": ("animation_type", str),
+            "saveagf": ("save_agf", _boolean),
+            **_RIGID_MODEL_KEYS,
+            **_LOD_KEYS,
+        },
+    ),
+    VegetationRules: (
+        VEGETATION_SECTION,
+        {
+            "targetpath": ("target_path", str),
+            "texturefolder": ("texture_folder", str),
+            "texturesubfolder": ("texture_subfolder", str),
+            "animationtype": ("animation_type", str),
+            "createrigidmodeldescriptionfile": ("create_description_file", _boolean),
+            "incendiaryradius": ("incendiary_radius", float),
+            **_RIGID_MODEL_KEYS,
+            **_LOD_KEYS,
+        },
+    ),
+    AnimationRules: (
+        ANIMATION_SECTION,
+        {
+            "coretranslations": ("core_translations", _boolean),
+            "facetranslations": ("face_translations", _boolean),
+            "facerotations": ("face_rotations", _boolean),
+            "lefthandtranslations": ("left_hand_translations", _boolean),
+            "lefthandrotations": ("left_hand_rotations", _boolean),
+            "righthandtranslations": ("right_hand_translations", _boolean),
+            "righthandrotations": ("right_hand_rotations", _boolean),
+            "ignoremetadata": ("ignore_metadata", _boolean),
+            "animationtype": ("animation_type", str),
+            "targetpath": ("target_path", str),
+            "cinematicanimationtype": ("cinematic_animation_type", str),
+            "cinematiccoretranslations": ("cinematic_core_translations", _boolean),
+            "cinematicfacetranslations": ("cinematic_face_translations", _boolean),
+            "cinematicfacerotations": ("cinematic_face_rotations", _boolean),
+            "cinematiclefthandtranslations": ("cinematic_left_hand_translations", _boolean),
+            "cinematiclefthandrotations": ("cinematic_left_hand_rotations", _boolean),
+            "cinematicrighthandtranslations": ("cinematic_right_hand_translations", _boolean),
+            "cinematicrighthandrotations": ("cinematic_right_hand_rotations", _boolean),
+        },
+    ),
+    SkeletonRules: (SKELETON_SECTION, {"targetpath": ("target_path", str)}),
+}
+
+
+# How BOB layers rules.bob files, measured with real builds (not assumed):
+#   - files are applied from raw_data down to the file's own folder, so the nearest folder wins, and
+#     within one file a later block beats an earlier one;
+#   - a plain [Section] REPLACES everything the farther files said for that section, [+Section]
+#     overrides included - a nearer plain section that omits TargetPath built nothing at all;
+#   - [+Section] merges key by key over what is already there, and a nearer unconditional [+Section]
+#     beats a farther <Files>-scoped one;
+#   - <Files> patterns are comma-separated, case-insensitive, matched against the path relative to the
+#     folder of the rules.bob that carries them. `...` stands for any run of characters (empty too),
+#     so `.../x` needs a separator before x while `...x` does not.
+# `*` matching across a separator is unconfirmed; it is read here as staying inside one path segment.
+_RESOLVED_FILES_KEY = "<files>"
+
+
+def _files_pattern(pattern: str) -> re.Pattern:
+    segments = pattern.strip().replace("\\", "/").split("...")
+    body = ".*".join(re.escape(segment).replace(r"\*", "[^/]*") for segment in segments)
+    return re.compile(body, re.IGNORECASE)
+
+
+def _files_match(patterns: list[str], relative_path: str) -> bool:
+    return any(_files_pattern(pattern).fullmatch(relative_path) for pattern in patterns)
+
+
+def _resolve(assembly_kit_root: str, directory: Path, settings_type: type, stem: str | None):
+    # field -> (parsed value, the key as the file spells it, its raw text, the rules.bob it came from),
+    # or None when no block between raw_data and the folder applies. stem None resolves the folder's
+    # own defaults: <Files>-scoped [+] overrides are skipped, which is what the dialog's fields are.
+    section, keys = _RULE_KEYS[settings_type]
+    plus_header = "[+" + section[1:]
+    try:
+        raw_data = (Path(assembly_kit_root) / "raw_data").resolve()
+        directory = Path(directory).resolve()
+        directory.relative_to(raw_data)
+    except (ValueError, OSError):
+        return None
+    folders = [directory, *directory.parents]
+    folders = folders[: folders.index(raw_data) + 1]
+    state: dict = {}
+    declared = False
+    for folder in reversed(folders):
+        rules_path = folder / RULES_FILENAME
+        try:
+            text = _read_rules(rules_path).replace("\r\n", "\n").replace("\n", "\r\n")
+        except OSError:
+            continue
+        relative_path = (directory / f"{stem}.cs2").relative_to(folder).as_posix() if stem else ""
+        for block in _split_blocks(text):
+            header = block[0].strip().lower()
+            if header not in (section, plus_header):
+                continue
+            entries = _block_entries(block)
+            patterns = [
+                pattern.strip()
+                for key, value in entries
+                if key.lower() == _RESOLVED_FILES_KEY
+                for pattern in value.split(",")
+                if pattern.strip()
+            ]
+            if patterns and stem is not None and not _files_match(patterns, relative_path):
+                continue
+            if patterns and stem is None and header == plus_header:
+                continue
+            if header == section:
+                state = {}
+            declared = True
+            for key, value in entries:
+                spec = keys.get(key.lower())
+                if spec is None:
+                    continue
+                try:
+                    state[spec[0]] = (spec[1](value), key, value, rules_path)
+                except ValueError:
+                    continue
+    return state if declared else None
+
+
+# What the export dialog shows for a folder that already has rules.bob files: the folder's own
+# defaults, resolved the way BOB layers them. None means no file between the folder and raw_data
+# declares the section, which is the dialog's cue to fall back to what the scene says.
+def load_rules(assembly_kit_root: str, directory: Path, settings_type: type):
+    state = _resolve(assembly_kit_root, directory, settings_type, None)
+    if state is None:
+        return None
+    settings = settings_type(**{field: entry[0] for field, entry in state.items()})
+    if settings_type is UnitRules and _lod_ladder_of(settings) == DEFAULT_LOD_DISTANCES:
+        settings = replace(settings, lod_distance_1=None, lod_distance_2=None, lod_distance_3=None, lod_distance_4=None)
+    return settings
+
+
+# What a <Files>-scoped [+Section] changes for the files being exported: (stem, key, raw value,
+# rules.bob it sits in), for every key whose value for that file is not the folder default.
+def rule_overrides(
+    assembly_kit_root: str, directory: Path, settings_type: type, stems: list[str]
+) -> list[tuple[str, str, str, Path]]:
+    folder_state = _resolve(assembly_kit_root, directory, settings_type, None) or {}
+    overrides = []
+    for stem in stems:
+        for field, (value, key, raw, rules_path) in (_resolve(assembly_kit_root, directory, settings_type, stem) or {}).items():
+            if field not in folder_state or folder_state[field][0] != value:
+                overrides.append((stem, key, raw, rules_path))
+    return overrides
+
+
+def _lod_ladder_of(settings) -> tuple:
+    return (settings.lod_distance_1, settings.lod_distance_2, settings.lod_distance_3, settings.lod_distance_4)
+
+
 def rules_conflict(
     assembly_kit_root: str, directory: Path, section: str, base_text: str, settings
 ) -> list[str]:
     # What the export dialog asks before it writes: nothing to confirm unless the artist changed a
     # setting away from its default AND a rules.bob is already sitting where BOB would read it.
-    if not _is_customised(settings):
+    if not _customised(assembly_kit_root, directory, settings):
         return []
     directory = Path(directory)
     if not inside_raw_data(assembly_kit_root, directory / "x.CS2"):
