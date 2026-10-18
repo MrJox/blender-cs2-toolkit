@@ -46,7 +46,10 @@ def skeleton_from_anim(animation: a.Animation, name: str, bone_table: BoneTable 
             # BT_LEFT_HAND a given one was is not recoverable from the .anim, so they all come in
             # as plain core bones unless a real .bone_table turns up beside it.
             bone_type = ROOT_BONE_TYPE if index == 0 else DEFAULT_BONE_TYPE
-            sort_order = 0 if index == 0 else 1
+            # BOB numbers a skeleton's bones by (sort_order, depth, name), so the .anim's own order
+            # has to be carried as sort_order or a mesh weighted against this skeleton compiles to
+            # bone indices that are not the game's. The root's 0 is the same rule.
+            sort_order = index
             flags = ""
 
         bones.append(
