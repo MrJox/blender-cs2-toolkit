@@ -810,7 +810,8 @@ class TW_OT_export_units(ExportTargetsMixin, BobWaitMixin, UnitRulesOptions, bpy
         units = self.collect_targets(context)
         if units is None:
             return {"CANCELLED"}
-        self.rules_animation_type = _bound_skeleton_name(units)
+        self.rules_scene_animation_type = _bound_skeleton_name(units)
+        self.sync_rules_to_destination(context, force=True)
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 

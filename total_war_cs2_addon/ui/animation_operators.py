@@ -292,7 +292,8 @@ class TW_OT_export_animation(BobWaitMixin, AnimationRulesOptions, bpy.types.Oper
             choice.export = action == assigned
         # clips_for already matched these clips to this Armature, so it is the skeleton they build
         # against and the same name every per-clip line will carry.
-        self.rules_animation_type = skeleton_name_for(armature_object)
+        self.rules_scene_animation_type = skeleton_name_for(armature_object)
+        self.sync_rules_to_destination(context, force=True)
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 

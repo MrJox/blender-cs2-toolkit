@@ -4,29 +4,39 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach the zip to (e.g. v1.1.0)"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - name: Package add-on
         run: |
-          zip -r "total_war_cs2_addon-${GITHUB_REF_NAME}.zip" total_war_cs2_addon
+          zip -r "total_war_cs2_addon-${TAG}.zip" total_war_cs2_addon
 
       - name: Publish release asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip_name="total_war_cs2_addon-${GITHUB_REF_NAME}.zip"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$zip_name" --clobber
+          zip_name="total_war_cs2_addon-${TAG}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$zip_name" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$zip_name" \
-              --title "$GITHUB_REF_NAME" \
+            gh release create "$TAG" "$zip_name" \
+              --title "$TAG" \
               --generate-notes
           fi

@@ -48,9 +48,10 @@ def table_bones(skeleton: Skeleton) -> list[SkeletonBone]:
 
 def compiled_bone_order(skeleton: Skeleton) -> list[str]:
     # The compiled bone index a weighted vertex and a MESH_ATTACH_POINT use is the bone's position
-    # in the bone-table bones sorted by (depth in the hierarchy collapsed to those bones ascending,
-    # name ascending) - PLAN_units.md 1.3, re-confirmed end to end by BOB's own output in Phase 4.
+    # in the bone-table bones sorted by (sort_order, depth in the hierarchy collapsed to those bones,
+    # name), all ascending - PLAN_units.md 1.3, re-confirmed end to end by BOB's own output in Phase 4.
     listed = {bone.name for bone in skeleton.bones if bone.bone_type}
+    sort_order_by_name = {bone.name: bone.sort_order for bone in skeleton.bones if bone.bone_type}
     depth_by_name: dict[str, int] = {}
     for bone in skeleton.bones:
         if bone.name not in listed:
@@ -64,4 +65,4 @@ def compiled_bone_order(skeleton: Skeleton) -> list[str]:
                 break
             parent_index = parent.parent_index
         depth_by_name[bone.name] = depth
-    return sorted(listed, key=lambda name: (depth_by_name[name], name))
+    return sorted(listed, key=lambda name: (sort_order_by_name[name], depth_by_name[name], name))
