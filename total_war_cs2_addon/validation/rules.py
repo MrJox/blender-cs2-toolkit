@@ -33,6 +33,7 @@ from extraction.skeleton_extract import extract_skeleton_from_armature
 from extraction.unit_extract import (
     armature_of,
     attachment_point_objects,
+    evaluated_bone_weights,
     find_unit_armature,
     mesh_objects,
     skeleton_name_for,
@@ -838,15 +839,10 @@ def _validate_weighted_object(
 
     unweighted = 0
     over_weighted = 0
-    for vertex in obj.data.vertices:
-        influences = sum(
-            1
-            for element in vertex.groups
-            if group_names.get(element.group) in bone_names and element.weight > 0.0
-        )
-        if influences == 0:
+    for influences in evaluated_bone_weights(obj, bpy.context.evaluated_depsgraph_get(), bone_names):
+        if not influences:
             unweighted += 1
-        elif influences > MAX_BONE_INFLUENCES:
+        elif len(influences) > MAX_BONE_INFLUENCES:
             over_weighted += 1
 
     if unweighted:
@@ -863,7 +859,7 @@ def _validate_weighted_object(
             ValidationIssue(
                 "WARNING",
                 f"'{obj.name}' has {over_weighted} vertex(es) weighted to more than {MAX_BONE_INFLUENCES} "
-                f"bones - the {MAX_BONE_INFLUENCES} strongest are kept and renormalised, as in every real unit part.",
+                f"bones once its modifiers are applied - BOB keeps the {MAX_BONE_INFLUENCES} strongest and redistributes the rest itself.",
                 obj.name,
             )
         )

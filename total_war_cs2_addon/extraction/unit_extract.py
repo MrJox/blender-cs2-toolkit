@@ -107,40 +107,53 @@ def _rest_pose(armature_objects: list[bpy.types.Object], view_layer: bpy.types.V
             view_layer.update()
 
 
+def evaluated_bone_weights(
+    obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph, bone_names: set[str]
+) -> list[list[tuple[str, float]]]:
+    group_names = {group.index: group.name for group in obj.vertex_groups}
+    obj_eval = obj.evaluated_get(depsgraph)
+    mesh = obj_eval.to_mesh()
+    try:
+        return [
+            [
+                (group_names[element.group], element.weight)
+                for element in vertex.groups
+                if group_names.get(element.group) in bone_names and element.weight > 0.0
+            ]
+            for vertex in mesh.vertices
+        ]
+    finally:
+        obj_eval.to_mesh_clear()
+
+
 def _vertex_weights(
     obj: bpy.types.Object,
+    depsgraph: bpy.types.Depsgraph,
     source_indices: list[int],
     bone_names: set[str],
     warnings: list[str],
 ) -> list[list[tuple[str, float]]]:
-    group_names = {group.index: group.name for group in obj.vertex_groups}
-    reduced = 0
-    per_source: dict[int, list[tuple[str, float]]] = {}
-    for vertex in obj.data.vertices:
-        influences = [
-            (group_names[element.group], element.weight)
-            for element in vertex.groups
-            if group_names.get(element.group) in bone_names and element.weight > 0.0
-        ]
-        influences.sort(key=lambda entry: entry[1], reverse=True)
-        if len(influences) > MAX_BONE_INFLUENCES:
-            reduced += 1
-            influences = influences[:MAX_BONE_INFLUENCES]
+    evaluated = evaluated_bone_weights(obj, depsgraph, bone_names)
+    over_weighted = 0
+    per_vertex: dict[int, list[tuple[str, float]]] = {}
+    for index, influences in enumerate(evaluated):
         if not influences:
             raise ExtractionError(
                 f"'{obj.name}' has vertices weighted to no bone at all - every vertex of a weighted "
                 "model needs at least one bone weight."
             )
+        if len(influences) > MAX_BONE_INFLUENCES:
+            over_weighted += 1
         total = sum(weight for _name, weight in influences)
-        per_source[vertex.index] = [(name, weight / total) for name, weight in influences]
+        per_vertex[index] = [(name, weight / total) for name, weight in influences]
 
-    if reduced:
+    if over_weighted:
         warnings.append(
-            f"'{obj.name}' had {reduced} vertex(es) weighted to more than {MAX_BONE_INFLUENCES} bones; "
-            f"the {MAX_BONE_INFLUENCES} strongest were kept and renormalised, which is what every real "
-            "unit model carries."
+            f"'{obj.name}' has {over_weighted} vertex(es) weighted to more than {MAX_BONE_INFLUENCES} bones "
+            f"once its modifiers are applied; BOB keeps the {MAX_BONE_INFLUENCES} strongest and redistributes "
+            "the rest itself."
         )
-    return [per_source[index] for index in source_indices]
+    return [per_vertex[index] for index in source_indices]
 
 
 def _extract_lod(
@@ -154,7 +167,7 @@ def _extract_lod(
     if not materials:
         raise ExtractionError(f"'{obj.name}' has no material assigned.")
     mesh, source_indices = _convert_mesh_indexed(obj, depsgraph, uv2_layer_name=_uv2_layer_name(materials))
-    weights = _vertex_weights(obj, source_indices, bone_names, warnings) if weighted else []
+    weights = _vertex_weights(obj, depsgraph, source_indices, bone_names, warnings) if weighted else []
     return UnitLod(
         lod_index=LOD_INDEX_BY_IDENTIFIER[obj.tw_lod_index],
         mesh=mesh,
