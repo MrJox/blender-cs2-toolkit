@@ -436,6 +436,12 @@ def validate_building(building_collection: bpy.types.Collection) -> list[Validat
 
     issues.extend(_validate_damage_parents(piece_collections))
 
+    platform_triangles_by_destruct = {
+        destruct_collection.name: _platform_triangles(destruct_collection)
+        for piece_collection in piece_collections
+        for destruct_collection in _children_with_role(piece_collection, "DESTRUCT")
+    }
+
     for piece_collection in piece_collections:
         destruct_collections = _children_with_role(piece_collection, "DESTRUCT")
         if not destruct_collections:
@@ -579,12 +585,8 @@ def validate_building(building_collection: bpy.types.Collection) -> list[Validat
             # see DOCKING_LINES below) don't have this requirement.
             ef_line_objects = [obj for c in ef_lines_collections for obj in c.objects if obj.type == "MESH"]
             if ef_line_objects:
-                platform_footprints = [
-                    footprint
-                    for platform_collection in _children_with_role(destruct_collection, "PLATFORM")
-                    for footprint in _platform_footprints(platform_collection)
-                ]
-                if not platform_footprints:
+                platform_triangles = platform_triangles_by_destruct[destruct_collection.name]
+                if not platform_triangles:
                     issues.append(
                         ValidationIssue(
                             "ERROR",
@@ -595,20 +597,30 @@ def validate_building(building_collection: bpy.types.Collection) -> list[Validat
                     )
                 else:
                     for obj in ef_line_objects:
-                        if len(obj.data.vertices) != 2:
+                        midpoint = _ef_line_midpoint(obj)
+                        if midpoint is None or _point_on_platform(midpoint, platform_triangles):
                             continue
-                        start = obj.data.vertices[0].co
-                        end = obj.data.vertices[1].co
-                        if not any(_point_in_footprint(start, fp) and _point_in_footprint(end, fp) for fp in platform_footprints):
-                            issues.append(
-                                ValidationIssue(
-                                    "WARNING",
-                                    f"'{obj.name}' doesn't look like it's within any Platform's horizontal bounds "
-                                    "(checked against each platform mesh's bounding box, not its exact outline). "
-                                    "BOB requires EFLines to sit on a platform - double check placement.",
-                                    obj.name,
-                                )
+                        elsewhere = [
+                            name
+                            for name, triangles in platform_triangles_by_destruct.items()
+                            if name != destruct_collection.name and _point_on_platform(midpoint, triangles)
+                        ]
+                        hint = (
+                            f" That spot is on the platform of '{elsewhere[0]}' - move the line into that "
+                            "destruct level's EFLines collection."
+                            if elsewhere
+                            else " Move the line onto the platform, or enlarge the platform to cover it."
+                        )
+                        issues.append(
+                            ValidationIssue(
+                                "WARNING",
+                                f"'{obj.name}' is not on a platform: its midpoint ({midpoint[0]:.2f}, {midpoint[1]:.2f}) "
+                                f"is outside every Platform and Platform Ground mesh of '{destruct_collection.name}'. "
+                                "BOB only looks at the platform of the line's own piece and destruct level, and fails "
+                                "with \"couldn't find platform for efline\"." + hint,
+                                obj.name,
                             )
+                        )
 
             for ef_lines_collection in ef_lines_collections:
                 for obj in ef_lines_collection.objects:
@@ -642,13 +654,14 @@ def _validate_line_object(obj: bpy.types.Object) -> list[ValidationIssue]:
     # open gate hard line was rejected outright with "which means it's not a closed outline".
     # extraction/extract.py force-closes both regardless, so this is a WARNING, not an error.
     if obj.tw_line_type in CLOSED_LINE_TYPES and obj.type == "CURVE" and obj.data.splines and not obj.data.splines[0].use_cyclic_u:
+        type_label = obj.bl_rna.properties["tw_line_type"].enum_items[obj.tw_line_type].name
         issues.append(
             ValidationIssue(
                 "WARNING",
-                f"'{obj.name}' is a {obj.tw_line_type} line but isn't a closed (cyclic) curve. These must "
-                "be closed loops or BOB rejects or hangs on the building's tech data - it will be closed "
-                "automatically on export, but consider marking the curve Cyclic yourself to see the "
-                "real shape while editing.",
+                f"'{obj.name}' has Line Type '{type_label}' (the default for a new curve), which must be a "
+                "closed loop - BOB rejects or hangs on an open one, so it is closed automatically on "
+                "export. If this line is meant to stay open, change its Line Type to Ground AD or one of "
+                "the Pipe types; otherwise tick Cyclic on the curve to see the real shape.",
                 obj.name,
             )
         )
@@ -668,25 +681,49 @@ def _validate_region_zone_object(obj: bpy.types.Object) -> list[ValidationIssue]
     return issues
 
 
-def _platform_footprints(platform_collection: bpy.types.Collection) -> list[tuple[float, float, float, float]]:
-    # A platform's exact outline can be non-convex, and validation has no depsgraph here (see
-    # validate_building's signature), so this checks each platform mesh's local-space horizontal
-    # (X/Y) bounding box rather than its precise footprint polygon - a cheap, artist-facing
-    # approximation of BOB's "couldn't find platform for efline" containment check, not an exact
-    # match for it.
-    footprints = []
-    for obj in platform_collection.objects:
-        if obj.type != "MESH" or len(obj.data.vertices) == 0:
+_PlatformTriangle = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+
+
+def _platform_triangles(destruct_collection: bpy.types.Collection) -> list[_PlatformTriangle]:
+    # Confirmed via real BOB runs: Platform Ground counts as a surface for EFLines like a plain
+    # Platform, and the test is exact triangle containment, so a bounding box would hide a notch.
+    triangles: list[_PlatformTriangle] = []
+    for platform_collection in _children_with_role(destruct_collection, "PLATFORM"):
+        for obj in platform_collection.objects:
+            if obj.type != "MESH" or len(obj.data.vertices) == 0:
+                continue
+            obj.data.calc_loop_triangles()
+            points = [obj.matrix_world @ vertex.co for vertex in obj.data.vertices]
+            for loop_triangle in obj.data.loop_triangles:
+                a, b, c = (points[index] for index in loop_triangle.vertices)
+                triangles.append(((a.x, a.y), (b.x, b.y), (c.x, c.y)))
+    return triangles
+
+
+def _ef_line_midpoint(obj: bpy.types.Object) -> tuple[float, float] | None:
+    # Confirmed via a real BOB run: only the midpoint is tested, so a line whose end pokes past
+    # the platform edge still places.
+    vertices = obj.data.vertices
+    if len(vertices) not in (2, 4):
+        return None
+    start = obj.matrix_world @ vertices[0].co
+    end = obj.matrix_world @ vertices[1 if len(vertices) == 2 else 2].co
+    return ((start.x + end.x) / 2.0, (start.y + end.y) / 2.0)
+
+
+def _point_on_platform(point: tuple[float, float], triangles: list[_PlatformTriangle]) -> bool:
+    tolerance = 1e-6
+    px, py = point
+    for a, b, c in triangles:
+        if abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) < tolerance:
             continue
-        xs = [v.co.x for v in obj.data.vertices]
-        ys = [v.co.y for v in obj.data.vertices]
-        footprints.append((min(xs), max(xs), min(ys), max(ys)))
-    return footprints
-
-
-def _point_in_footprint(point, footprint: tuple[float, float, float, float]) -> bool:
-    min_x, max_x, min_y, max_y = footprint
-    return min_x <= point.x <= max_x and min_y <= point.y <= max_y
+        sides = [
+            (q[0] - p[0]) * (py - p[1]) - (q[1] - p[1]) * (px - p[0])
+            for p, q in ((a, b), (b, c), (c, a))
+        ]
+        if not (any(side < -tolerance for side in sides) and any(side > tolerance for side in sides)):
+            return True
+    return False
 
 
 def _validate_two_point_line_object(obj: bpy.types.Object) -> list[ValidationIssue]:
