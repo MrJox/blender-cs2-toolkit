@@ -1,0 +1,28 @@
+schema_version = "1.0.0"
+
+id = "total_war_cs2_addon"
+version = "1.2.0"
+name = "Blender CS2 All-in-One Kit"
+tagline = "Author Total War buildings and units, exported as .CS2"
+maintainer = "MrJox"
+type = "add-on"
+
+website = "https://github.com/MrJox/blender-cs2-toolkit"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+tags = ["Import-Export"]
+
+[permissions]
+files = "Read the Assembly Kit; write exported .CS2 and BOB output"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "*.pyc",
+  "*.blend1",
+  "*.CS2",
+  "/scripts/",
+]

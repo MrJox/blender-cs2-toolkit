@@ -585,8 +585,15 @@
 
         <ol class="steps">
           <li>
-            <p><b>Install the add-on.</b> In Blender: <code>Edit &gt; Preferences &gt; Add-ons</code>, then
-              install the add-on's <code>.zip</code> and tick it on.</p>
+            <p><b>Install the add-on.</b> In Blender 4.2 or newer:
+              <code>Edit &gt; Preferences &gt; Get Extensions</code>, open the <b>Repositories</b> drop-down
+              (top right), choose <code>+ &gt; Add Remote Repository</code> and paste
+              <code>https://mrjox.github.io/blender-cs2-toolkit/extensions/index.json</code>. Keep
+              <b>Check for Updates on Startup</b> ticked, then install <b>Blender CS2 All-in-One Kit</b>
+              from the list.</p>
+            <p>New versions then arrive by themselves: Blender shows an <b>Update</b> button on the
+              extension, and one click installs it. If you copied an older version into Blender's
+              <span class="path">scripts/addons</span> folder by hand, delete it first.</p>
           </li>
           <li>
             <p><b>Check the Assembly Kit folder.</b> Still in Preferences, expand the add-on's entry.</p>

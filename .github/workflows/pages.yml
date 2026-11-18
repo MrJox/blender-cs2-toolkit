@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "total_war_cs2_addon/docs/**"
+      - ".github/workflows/pages.yml"
+      - ".github/actions/setup-blender/**"
   workflow_dispatch: {}
 
 permissions:
@@ -29,6 +31,23 @@ jobs:
         run: |
           mkdir -p _site
           cp total_war_cs2_addon/docs/user_guide.html _site/index.html
+
+      - uses: ./.github/actions/setup-blender
+
+      - name: Build extension repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site/extensions
+          if gh release download --repo "$GITHUB_REPOSITORY" \
+              --pattern 'total_war_cs2_addon-[0-9]*.zip' --dir _site/extensions; then
+            blender --background --factory-startup --command extension server-generate \
+              --repo-dir _site/extensions --html
+            ls -l _site/extensions
+          else
+            echo "::notice::Latest release has no extension zip yet; publishing docs only"
+            rmdir _site/extensions
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
