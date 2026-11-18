@@ -1,0 +1,40 @@
+name: Set up Blender
+description: Install a pinned Blender LTS build and put it on PATH
+
+inputs:
+  version:
+    description: Blender version to install
+    default: "4.2.23"
+  sha256:
+    description: SHA-256 of the linux-x64 tarball for that version
+    default: "bea0eb3146be13eae6225409a117b215184f41b7f79e799f97cb3abb8f6dc404"
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Blender
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/blender
+        key: blender-${{ inputs.version }}-linux-x64
+
+    - name: Download Blender
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |
+        archive="blender-${VERSION}-linux-x64.tar.xz"
+        curl -fsSL -o "$RUNNER_TEMP/$archive" "https://download.blender.org/release/Blender${VERSION%.*}/$archive"
+        echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+        mkdir -p "$RUNNER_TEMP/blender"
+        tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/blender" --strip-components=1
+
+    - name: Install runtime libraries
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq libgl1 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6
+        echo "$RUNNER_TEMP/blender" >> "$GITHUB_PATH"

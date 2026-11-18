@@ -32,17 +32,31 @@ project's development directory rather than in this repository (see [Repository 
 
 ## Requirements
 
-- Blender 4.0+
+- Blender 4.2+
 - A Total War title's Assembly Kit installed, with BOB (the game's own asset compiler, which this
   add-on hands off to; it is not distributed here) — validated against Total War: Attila
 
 ## Installation
 
-1. Download `total_war_cs2_addon` from the latest [release](../../releases) (or clone this repo).
-2. Copy the `total_war_cs2_addon/` folder into Blender's addons directory, e.g.
-   `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\total_war_cs2_addon\`.
-3. In Blender, enable **Edit > Preferences > Add-ons > Blender CS2 All-in-One Kit**.
-4. The add-on's panel appears under **View3D > Sidebar > Total War**.
+The add-on is a Blender extension served from its own repository, so Blender installs it and keeps
+it up to date for you.
+
+1. In Blender, open **Edit > Preferences > Get Extensions**, open the **Repositories** drop-down
+   (top right), click **+ > Add Remote Repository**, and paste
+   `https://mrjox.github.io/blender-cs2-toolkit/extensions/index.json`.
+   Leave **Check for Updates on Startup** ticked.
+2. Find **Blender CS2 All-in-One Kit** in the extension list and click **Install**.
+3. The add-on's panel appears under **View3D > Sidebar > Total War**.
+
+When a new release is published, Blender shows an **Update** button on the extension (and a badge on
+the Preferences icon). One click installs it; no manual download or reinstall.
+
+To install without the repository, download `total_war_cs2_addon-<version>.zip` from the latest
+[release](../../releases) and use **Get Extensions > Install from Disk**. That copy will not update
+itself.
+
+If you installed an older release by copying the `total_war_cs2_addon/` folder into Blender's
+`scripts/addons` directory, delete that folder first.
 
 ## Repository layout
 

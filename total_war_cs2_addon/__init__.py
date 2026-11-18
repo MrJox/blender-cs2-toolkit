@@ -2,7 +2,7 @@ bl_info = {
     "name": "Blender CS2 All-in-One Kit",
     "author": "Blender CS2 All-in-One Kit Add-on",
     "version": (0, 1, 0),
-    "blender": (4, 0, 0),
+    "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Total War",
     "description": "Create and export Total War / CS2 battlefield buildings and units as .CS2 files",
     "category": "Import-Export",
@@ -18,6 +18,15 @@ import bpy
 # as a standalone pure-Python library outside Blender. Blender only puts the add-ons root directory
 # on sys.path, not this add-on's own folder, so it has to be added here.
 _ADDON_DIR = os.path.dirname(__file__)
+
+# Blender re-executes this file after an in-session extension update, but the sub-packages stay
+# cached from the old version, so drop them before the imports below.
+_ADDON_ROOT = os.path.normcase(_ADDON_DIR) + os.sep
+for _name, _module in list(sys.modules.items()):
+    _file = getattr(_module, "__file__", None)
+    if _file and _name != __name__ and os.path.normcase(_file).startswith(_ADDON_ROOT):
+        del sys.modules[_name]
+
 if _ADDON_DIR not in sys.path:
     sys.path.insert(0, _ADDON_DIR)
 
